@@ -439,18 +439,24 @@ function updateStats() {
 
 function render() {
   updateStats();
+  // Preserve checkbox selections across polling re-renders
+  const selected = new Set(
+    [...document.querySelectorAll('tbody .row-check:checked')].map(c => c.dataset.id)
+  );
   const filtered = applySearchAndSort(allTasks.filter(t => matchFilter(t, activeFilter)));
   const tbody = $('tbody');
   $('tableSummary').textContent = `共 ${allTasks.length} 条 · 运行中 ${allTasks.filter(t=>t.status==='running').length} · 排队中 ${allTasks.filter(t=>t.status==='pending').length}`;
   if (filtered.length === 0) {
     tbody.innerHTML = '';
     $('emptyState').style.display = 'block';
+    $('checkAll').checked = false;
+    updateBatchBar();
     return;
   }
   $('emptyState').style.display = 'none';
   tbody.innerHTML = filtered.map(t => `
     <tr data-id="${t.id}">
-      <td><input type="checkbox" class="row-check" data-id="${t.id}"></td>
+      <td><input type="checkbox" class="row-check" data-id="${t.id}"${selected.has(t.id)?' checked':''}></td>
       <td>${queueCell(t)}</td>
       <td class="td-id">${escapeHtml(t.id)}</td>
       <td class="td-host">${escapeHtml(t.host)}${t.note ? `<div style="color:#555;font-size:11px;margin-top:2px">${escapeHtml(t.note)}</div>` : ''}</td>
@@ -461,6 +467,10 @@ function render() {
       <td class="td-time">${fmtDuration(t.duration_sec)}</td>
       <td>${actionsCell(t)}</td>
     </tr>`).join('');
+  // Sync checkAll header to "all visible rows checked"
+  const total = filtered.length;
+  const checked = filtered.filter(t => selected.has(t.id)).length;
+  $('checkAll').checked = total > 0 && checked === total;
   updateBatchBar();
 }
 
@@ -485,12 +495,13 @@ async function refresh() {
 async function doAction(act, id) {
   try {
     if (act === 'jump') await api(`/api/tasks/${id}/jump`, {method:'POST'});
-    else if (act === 'kill') { if (!confirm('确定终止该任务?')) return; await api(`/api/tasks/${id}/kill`, {method:'POST'}); }
-    else if (act === 'delete') { if (!confirm('确定删除该任务?')) return; await api(`/api/tasks/${id}`, {method:'DELETE'}); }
+    else if (act === 'kill') { if (!confirm('确定终止该任务?')) return false; await api(`/api/tasks/${id}/kill`, {method:'POST'}); }
+    else if (act === 'delete') { if (!confirm('确定删除该任务?')) return false; await api(`/api/tasks/${id}`, {method:'DELETE'}); }
     else if (act === 'rerun') await api(`/api/tasks/${id}/rerun`, {method:'POST'});
     showToast('操作成功');
     refresh();
-  } catch (e) { showToast('操作失败：' + e.message, true); }
+    return true;
+  } catch (e) { showToast('操作失败：' + e.message, true); return false; }
 }
 
 async function doBatch(action) {
@@ -498,13 +509,15 @@ async function doBatch(action) {
   if (!ids.length) return;
   if (action === 'delete' && !confirm(`确定删除 ${ids.length} 个任务?`)) return;
   if (action === 'kill' && !confirm(`确定终止选中的运行中任务?`)) return;
-  await api('/api/tasks/batch', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({action, ids})
-  });
-  showToast('批量操作完成');
-  refresh();
+  try {
+    await api('/api/tasks/batch', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({action, ids})
+    });
+    showToast('批量操作完成');
+    refresh();
+  } catch (e) { showToast('批量操作失败：' + e.message, true); }
 }
 
 async function showDetail(id) {
@@ -581,6 +594,7 @@ $('checkAll').addEventListener('change', e => {
 });
 $('batchClear').addEventListener('click', () => {
   document.querySelectorAll('.row-check').forEach(c => c.checked = false);
+  $('checkAll').checked = false;
   updateBatchBar();
 });
 $('searchInput').addEventListener('input', render);
@@ -604,13 +618,22 @@ $('btnStart').addEventListener('click', async () => {
     note: $('reqNote').value,
   };
   if (!body.request_text.trim()) { showToast('请粘贴请求包', true); return; }
-  const r = await fetch('/api/tasks', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-  if (r.ok) { closeModal('newScanModal'); $('reqText').value = ''; $('reqNote').value = ''; showToast('任务已加入队列'); refresh(); }
-  else { showToast('创建失败', true); }
+  try {
+    await api('/api/tasks', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    closeModal('newScanModal');
+    $('reqText').value = '';
+    $('reqNote').value = '';
+    showToast('任务已加入队列');
+    refresh();
+  } catch (e) { showToast('创建失败：' + e.message, true); }
 });
 
-$('detailRerun').addEventListener('click', () => currentDetailId && doAction('rerun', currentDetailId).then(() => closeModal('detailModal')));
-$('detailDel').addEventListener('click', () => currentDetailId && doAction('delete', currentDetailId).then(() => closeModal('detailModal')));
+$('detailRerun').addEventListener('click', async () => {
+  if (currentDetailId && await doAction('rerun', currentDetailId)) closeModal('detailModal');
+});
+$('detailDel').addEventListener('click', async () => {
+  if (currentDetailId && await doAction('delete', currentDetailId)) closeModal('detailModal');
+});
 
 $('saveCfg').addEventListener('click', async () => {
   await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({sqlmap_path: $('sqlmapPath').value})});

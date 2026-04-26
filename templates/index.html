@@ -170,22 +170,11 @@ tbody tr:last-child td{border-bottom:none}
     <div class="nav-item" data-filter="killed"><span class="icon">■</span> 已终止 <span class="badge dark" id="cnt-killed">0</span></div>
   </div>
   <div class="config-box">
-    <label>SQLMAP 路径（本机）</label>
-    <input type="text" id="sqlmapPath" placeholder="/usr/bin/sqlmap">
-    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #21262d">
-      <div style="font-size:10px;color:#444;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">远程执行（留空=本地）</div>
-      <label>SSH Host</label>
-      <input type="text" id="remoteHost" placeholder="192.168.1.10">
-      <label style="margin-top:5px">SSH Port</label>
-      <input type="text" id="remotePort" placeholder="22">
-      <label style="margin-top:5px">SSH User</label>
-      <input type="text" id="remoteUser" placeholder="root">
-      <label style="margin-top:5px">私钥路径（Server B 上）</label>
-      <input type="text" id="remoteKeyPath" placeholder="/root/.ssh/id_rsa">
-      <label style="margin-top:5px">远程 sqlmap 路径</label>
-      <input type="text" id="remoteSqlmapPath" placeholder="/usr/bin/sqlmap">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <span style="font-size:11px;color:#7d8590;letter-spacing:1px;text-transform:uppercase">执行服务器</span>
+      <button onclick="openAddServer()" style="background:#238636;border:none;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;cursor:pointer">＋ 添加</button>
     </div>
-    <button id="saveCfg" style="margin-top:8px">保存配置</button>
+    <div id="serverList" style="display:flex;flex-direction:column;gap:4px"></div>
   </div>
 </div>
 
@@ -241,6 +230,7 @@ tbody tr:last-child td{border-bottom:none}
             <th style="width:60px">队列</th>
             <th>任务 ID</th>
             <th>Host</th>
+            <th>服务器</th>
             <th>注入</th>
             <th>UPDATE</th>
             <th>Root</th>
@@ -281,14 +271,74 @@ tbody tr:last-child td{border-bottom:none}
           <select id="reqTimeout"><option>5</option><option>10</option><option selected>15</option><option>30</option><option>60</option><option value="0">不限制</option></select>
         </div>
       </div>
-      <div class="form-group">
-        <label>备注（可选）</label>
-        <input type="text" id="reqNote" placeholder="如：客户A 内网扫描">
+      <div class="form-row2">
+        <div class="form-group">
+          <label>执行服务器</label>
+          <select id="reqServer"></select>
+        </div>
+        <div class="form-group">
+          <label>备注（可选）</label>
+          <input type="text" id="reqNote" placeholder="如：客户A 内网扫描">
+        </div>
       </div>
     </div>
     <div class="modal-foot">
       <button class="btn-cancel" onclick="closeModal('newScanModal')">取消</button>
       <button class="btn-start" id="btnStart">加入队列</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="serverModal">
+  <div class="modal" style="width:480px">
+    <div class="modal-head">
+      <h3 id="serverModalTitle">添加服务器</h3>
+      <button class="modal-close" onclick="closeModal('serverModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="srvEditId">
+      <div class="form-group">
+        <label>名称</label>
+        <input type="text" id="srvName" placeholder="如：渗透机A">
+      </div>
+      <div class="form-group">
+        <label>类型</label>
+        <select id="srvType" onchange="toggleSrvType()">
+          <option value="ssh">SSH 远程</option>
+        </select>
+      </div>
+      <div id="srvSshFields">
+        <div class="form-row2">
+          <div class="form-group">
+            <label>SSH Host</label>
+            <input type="text" id="srvHost" placeholder="192.168.1.10">
+          </div>
+          <div class="form-group">
+            <label>SSH Port</label>
+            <input type="text" id="srvPort" placeholder="22" style="width:80px">
+          </div>
+        </div>
+        <div class="form-row2">
+          <div class="form-group">
+            <label>SSH User</label>
+            <input type="text" id="srvUser" placeholder="root">
+          </div>
+          <div class="form-group">
+            <label>私钥路径（本机）</label>
+            <input type="text" id="srvKeyPath" placeholder="/root/.ssh/id_rsa">
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>sqlmap 路径（服务器上）</label>
+        <input type="text" id="srvSqlmapPath" placeholder="/usr/bin/sqlmap">
+      </div>
+      <div id="srvTestResult" style="margin-top:8px;font-size:12px;display:none"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" id="srvTestBtn" style="background:#1f2937;border-color:#30363d" onclick="testServer()">测试连接</button>
+      <button class="btn-cancel" onclick="closeModal('serverModal')">取消</button>
+      <button class="btn-start" id="srvSaveBtn" onclick="saveServer()">保存</button>
     </div>
   </div>
 </div>
@@ -473,6 +523,7 @@ function render() {
       <td>${queueCell(t)}</td>
       <td class="td-id">${escapeHtml(t.id)}</td>
       <td class="td-host">${escapeHtml(t.host)}${t.note ? `<div style="color:#555;font-size:11px;margin-top:2px">${escapeHtml(t.note)}</div>` : ''}</td>
+      <td><span style="font-size:11px;color:#7d8590">${escapeHtml(t.server_name||'本地')}</span></td>
       <td>${injectTag(t)}</td>
       <td>${updateTag(t)}</td>
       <td>${dbaTag(t)}</td>
@@ -622,17 +673,152 @@ document.querySelectorAll('#navFilters .nav-item, .ftag').forEach(el => {
   });
 });
 
-$('btnStart').addEventListener('click', async () => {
-  const body = {
-    request_text: $('reqText').value,
-    level: parseInt($('reqLevel').value),
-    risk: parseInt($('reqRisk').value),
-    timeout_min: parseInt($('reqTimeout').value),
-    note: $('reqNote').value,
+$('detailRerun').addEventListener('click', async () => {
+  if (currentDetailId && await doAction('rerun', currentDetailId)) closeModal('detailModal');
+});
+$('detailDel').addEventListener('click', async () => {
+  if (currentDetailId && await doAction('delete', currentDetailId)) closeModal('detailModal');
+});
+
+// ---------------------------------------------------------------------------
+// Server management
+// ---------------------------------------------------------------------------
+let allServers = [];
+
+async function loadServers() {
+  allServers = await api('/api/servers');
+  renderServerList();
+  renderServerSelect();
+}
+
+function renderServerList() {
+  const el = $('serverList');
+  if (!allServers.length) { el.innerHTML = '<div style="font-size:11px;color:#444">暂无服务器</div>'; return; }
+  el.innerHTML = allServers.map(s => `
+    <div style="display:flex;align-items:center;gap:6px;padding:5px 6px;background:#0d0e14;border:1px solid #21262d;border-radius:5px">
+      <span style="font-size:9px;color:${s.is_local?'#238636':'#1f6feb'}">${s.is_local?'●':'⬡'}</span>
+      <span style="flex:1;font-size:12px;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(s.is_local?'本地':''+s.host)}">${escapeHtml(s.name)}</span>
+      <button onclick="editServer('${s.id}')" style="background:none;border:none;color:#7d8590;cursor:pointer;font-size:11px;padding:0 2px" title="编辑">✎</button>
+      ${s.is_local ? '' : `<button onclick="deleteServer('${s.id}','${escapeHtml(s.name)}')" style="background:none;border:none;color:#da3633;cursor:pointer;font-size:11px;padding:0 2px" title="删除">✕</button>`}
+    </div>`).join('');
+}
+
+function renderServerSelect() {
+  const sel = $('reqServer');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = allServers.map(s =>
+    `<option value="${s.id}">${escapeHtml(s.name)}${s.is_local ? '' : ' ('+escapeHtml(s.host)+')'}</option>`
+  ).join('');
+  if (prev && allServers.find(s => s.id === prev)) sel.value = prev;
+}
+
+function openAddServer() {
+  $('serverModalTitle').textContent = '添加服务器';
+  $('srvEditId').value = '';
+  $('srvName').value = '';
+  $('srvType').value = 'ssh';
+  $('srvType').disabled = false;
+  $('srvHost').value = '';
+  $('srvPort').value = '22';
+  $('srvUser').value = 'root';
+  $('srvKeyPath').value = '';
+  $('srvSqlmapPath').value = '/usr/bin/sqlmap';
+  $('srvSshFields').style.display = '';
+  $('srvTestResult').style.display = 'none';
+  openModal('serverModal');
+}
+
+function editServer(id) {
+  const s = allServers.find(x => x.id === id);
+  if (!s) return;
+  $('serverModalTitle').textContent = '编辑服务器';
+  $('srvEditId').value = s.id;
+  $('srvName').value = s.name;
+  $('srvType').value = s.is_local ? 'local' : 'ssh';
+  $('srvType').disabled = true;
+  $('srvHost').value = s.host || '';
+  $('srvPort').value = s.port || 22;
+  $('srvUser').value = s.user || 'root';
+  $('srvKeyPath').value = s.key_path || '';
+  $('srvSqlmapPath').value = s.sqlmap_path || '/usr/bin/sqlmap';
+  $('srvSshFields').style.display = s.is_local ? 'none' : '';
+  $('srvTestResult').style.display = 'none';
+  openModal('serverModal');
+}
+
+function toggleSrvType() {
+  $('srvSshFields').style.display = $('srvType').value === 'local' ? 'none' : '';
+}
+
+async function saveServer() {
+  const editId = $('srvEditId').value;
+  const payload = {
+    name: $('srvName').value.trim(),
+    host: $('srvHost').value.trim(),
+    port: $('srvPort').value.trim() || '22',
+    user: $('srvUser').value.trim() || 'root',
+    key_path: $('srvKeyPath').value.trim(),
+    sqlmap_path: $('srvSqlmapPath').value.trim(),
   };
-  if (!body.request_text.trim()) { showToast('请粘贴请求包', true); return; }
+  if (!payload.name) { showToast('请填写名称', true); return; }
   try {
-    await api('/api/tasks', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    if (editId) {
+      await api(`/api/servers/${editId}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    } else {
+      await api('/api/servers', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    }
+    closeModal('serverModal');
+    await loadServers();
+    showToast('服务器已保存');
+  } catch(e) { showToast('保存失败：' + e.message, true); }
+}
+
+async function deleteServer(id, name) {
+  if (!confirm(`确定删除服务器「${name}」？`)) return;
+  try {
+    await api(`/api/servers/${id}`, {method:'DELETE'});
+    await loadServers();
+    showToast('已删除');
+  } catch(e) { showToast('删除失败：' + e.message, true); }
+}
+
+async function testServer() {
+  const editId = $('srvEditId').value;
+  if (!editId) {
+    showToast('请先保存服务器再测试', true);
+    return;
+  }
+  const el = $('srvTestResult');
+  el.style.display = 'block';
+  el.style.color = '#7d8590';
+  el.textContent = '连接中...';
+  try {
+    const r = await api(`/api/servers/${editId}/test`, {method:'POST'});
+    el.style.color = r.ok ? '#238636' : '#da3633';
+    el.textContent = r.ok ? '✓ ' + r.message : '✗ ' + r.message;
+  } catch(e) {
+    el.style.color = '#da3633';
+    el.textContent = '✗ ' + e.message;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Task creation
+// ---------------------------------------------------------------------------
+$('btnStart').addEventListener('click', async () => {
+  const txt = $('reqText').value.trim();
+  if (!txt) { showToast('请填写请求包', true); return; }
+  try {
+    const data = {
+      request_text: txt,
+      level: parseInt($('reqLevel').value),
+      risk: parseInt($('reqRisk').value),
+      timeout_min: parseInt($('reqTimeout').value) || 0,
+      note: $('reqNote').value.trim(),
+      server_id: $('reqServer').value || 'local',
+    };
+    await api('/api/tasks', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
     closeModal('newScanModal');
     $('reqText').value = '';
     $('reqNote').value = '';
@@ -641,39 +827,8 @@ $('btnStart').addEventListener('click', async () => {
   } catch (e) { showToast('创建失败：' + e.message, true); }
 });
 
-$('detailRerun').addEventListener('click', async () => {
-  if (currentDetailId && await doAction('rerun', currentDetailId)) closeModal('detailModal');
-});
-$('detailDel').addEventListener('click', async () => {
-  if (currentDetailId && await doAction('delete', currentDetailId)) closeModal('detailModal');
-});
-
-$('saveCfg').addEventListener('click', async () => {
-  try {
-    await api('/api/settings', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        sqlmap_path:        $('sqlmapPath').value,
-        remote_host:        $('remoteHost').value,
-        remote_port:        $('remotePort').value,
-        remote_user:        $('remoteUser').value,
-        remote_key_path:    $('remoteKeyPath').value,
-        remote_sqlmap_path: $('remoteSqlmapPath').value,
-      }),
-    });
-    showToast('配置已保存');
-  } catch(e) { showToast('保存失败：' + e.message, true); }
-});
-
 (async () => {
-  const cfg = await api('/api/settings');
-  $('sqlmapPath').value        = cfg.sqlmap_path        || '/usr/bin/sqlmap';
-  $('remoteHost').value        = cfg.remote_host        || '';
-  $('remotePort').value        = cfg.remote_port        || '';
-  $('remoteUser').value        = cfg.remote_user        || '';
-  $('remoteKeyPath').value     = cfg.remote_key_path    || '';
-  $('remoteSqlmapPath').value  = cfg.remote_sqlmap_path || '';
+  await loadServers();
   await refresh();
   setInterval(refresh, 3000);
 })();

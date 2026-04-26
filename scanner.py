@@ -35,7 +35,7 @@ def parse_host(request_text):
     return m.group(1) if m else "unknown"
 
 
-def create_task(request_text, level, risk, timeout_min, note=""):
+def create_task(request_text, level, risk, timeout_min, note="", server_id="local"):
     task_id = uuid.uuid4().hex[:8]
     host = parse_host(request_text)
     task_dir = os.path.join(config.SCANS_DIR, task_id)
@@ -56,6 +56,7 @@ def create_task(request_text, level, risk, timeout_min, note=""):
             "request_text": request_text,
             "log": "",
             "created_at": now_iso(),
+            "server_id": server_id or "local",
         })
     except Exception:
         # Roll back: don't leave an orphan directory if anything failed
@@ -115,6 +116,7 @@ def rerun_task(task_id):
         old["risk"],
         old["timeout_min"],
         note=old.get("note") or "",
+        server_id=old.get("server_id") or "local",
     )
 
 
@@ -201,24 +203,7 @@ def _run_sqlmap(cmd, timeout_sec):
     return proc.returncode, "".join(output_lines), timed_out
 
 
-def _get_ssh_settings():
-    """Return SSH settings dict if remote_host is configured, else None."""
-    host = (db.get_setting("remote_host") or "").strip()
-    if not host:
-        return None
-    return {
-        "host": host,
-        "port": int((db.get_setting("remote_port") or "22").strip() or 22),
-        "user": (db.get_setting("remote_user") or "root").strip(),
-        "key_path": (db.get_setting("remote_key_path") or "").strip(),
-        "password": (db.get_setting("remote_password") or "").strip(),
-        # Fall back to the local sqlmap_path setting if no remote path configured
-        "sqlmap_path": (db.get_setting("remote_sqlmap_path") or "").strip()
-                       or db.get_setting("sqlmap_path", config.DEFAULT_SQLMAP_PATH),
-    }
-
-
-def _run_sqlmap_remote(ssh, request_text, task_id, level, risk, timeout_sec, extra=None):
+def _run_sqlmap_remote(srv, request_text, task_id, level, risk, timeout_sec, extra=None):
     """Run sqlmap on a remote host via SSH. Returns (returncode, output, timed_out)."""
     global _current_ssh_client, _current_remote_dir
     try:
@@ -230,15 +215,13 @@ def _run_sqlmap_remote(ssh, request_text, task_id, level, risk, timeout_sec, ext
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
     connect_kw = dict(
-        hostname=ssh["host"],
-        port=ssh["port"],
-        username=ssh["user"],
+        hostname=srv["host"],
+        port=int(srv.get("port") or 22),
+        username=srv.get("user") or "root",
         timeout=15,
     )
-    if ssh.get("key_path"):
-        connect_kw["key_filename"] = ssh["key_path"]
-    if ssh.get("password"):
-        connect_kw["password"] = ssh["password"]
+    if srv.get("key_path"):
+        connect_kw["key_filename"] = srv["key_path"]
 
     try:
         client.connect(**connect_kw)
@@ -265,8 +248,8 @@ def _run_sqlmap_remote(ssh, request_text, task_id, level, risk, timeout_sec, ext
         finally:
             sftp.close()
 
-        # Build command with remote paths
-        cmd = _build_cmd(ssh["sqlmap_path"], remote_request, remote_output, level, risk, extra)
+        sqlmap_path = srv.get("sqlmap_path") or config.DEFAULT_SQLMAP_PATH
+        cmd = _build_cmd(sqlmap_path, remote_request, remote_output, level, risk, extra)
         cmd_str = " ".join(shlex.quote(p) for p in cmd)
 
         with _runtime_lock:
@@ -308,7 +291,6 @@ def _run_sqlmap_remote(ssh, request_text, task_id, level, risk, timeout_sec, ext
         with _runtime_lock:
             _current_ssh_client = None
             _current_remote_dir = None
-        # Clean up remote temp dir
         try:
             client.exec_command(f"rm -rf {shlex.quote(remote_dir)}")
         except Exception:
@@ -316,6 +298,50 @@ def _run_sqlmap_remote(ssh, request_text, task_id, level, risk, timeout_sec, ext
         client.close()
 
     return returncode, "".join(output_lines), timed_out
+
+
+def test_server_connection(server_id):
+    """Try to SSH in and run sqlmap --version. Returns (ok, message)."""
+    srv = db.get_server(server_id)
+    if not srv:
+        return False, "server not found"
+    if srv.get("is_local"):
+        import subprocess as sp
+        sqlmap = srv.get("sqlmap_path") or config.DEFAULT_SQLMAP_PATH
+        try:
+            r = sp.run([sqlmap, "--version"], capture_output=True, text=True, timeout=10)
+            ver = (r.stdout or r.stderr or "").strip().splitlines()[0] if (r.stdout or r.stderr) else ""
+            return True, ver or "ok"
+        except FileNotFoundError:
+            return False, f"sqlmap not found at {sqlmap}"
+        except Exception as e:
+            return False, str(e)
+    else:
+        try:
+            import paramiko
+        except ImportError:
+            return False, "paramiko not installed"
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            connect_kw = dict(
+                hostname=srv["host"],
+                port=int(srv.get("port") or 22),
+                username=srv.get("user") or "root",
+                timeout=10,
+            )
+            if srv.get("key_path"):
+                connect_kw["key_filename"] = srv["key_path"]
+            client.connect(**connect_kw)
+            sqlmap = srv.get("sqlmap_path") or config.DEFAULT_SQLMAP_PATH
+            _, stdout, stderr = client.exec_command(f"{shlex.quote(sqlmap)} --version")
+            out = (stdout.read() or stderr.read()).decode("utf-8", errors="replace").strip()
+            ver = out.splitlines()[0] if out else "ok"
+            return True, ver
+        except Exception as e:
+            return False, str(e)
+        finally:
+            client.close()
 
 
 def _parse_injection(output):
@@ -382,7 +408,7 @@ def _execute_task(task_id):
     if not task:
         return
 
-    sqlmap_path = db.get_setting("sqlmap_path", config.DEFAULT_SQLMAP_PATH)
+    srv = db.get_server(task.get("server_id") or "local") or db.get_server("local")
     task_dir = os.path.join(config.SCANS_DIR, task_id)
     request_file = os.path.join(task_dir, "request.txt")
     output_dir = os.path.join(task_dir, "output")
@@ -391,32 +417,10 @@ def _execute_task(task_id):
     timeout_sec = task["timeout_min"] * 60 if task["timeout_min"] else None
     started = time.time()
     level, risk = task["level"], task["risk"]
+    sqlmap_path = srv.get("sqlmap_path") or config.DEFAULT_SQLMAP_PATH
 
-    ssh = _get_ssh_settings()
-
-    if ssh:
-        # Remote mode: build display strings using remote paths
-        remote_sqlmap = ssh["sqlmap_path"]
-        remote_dir = f"/tmp/openclaw_{task_id}"
-        remote_req = f"{remote_dir}/request.txt"
-        remote_out = f"{remote_dir}/output"
-
-        cmd_inject_str = " ".join(shlex.quote(p) for p in
-            _build_cmd(remote_sqlmap, remote_req, remote_out, level, risk))
-        cmd_update_str = " ".join(shlex.quote(p) for p in
-            _build_cmd(remote_sqlmap, remote_req, remote_out, level, risk,
-                extra=["--sql-query=UPDATE information_schema.TABLES "
-                       "SET TABLE_COMMENT=TABLE_COMMENT WHERE 1=0"]))
-        cmd_dba_str = " ".join(shlex.quote(p) for p in
-            _build_cmd(remote_sqlmap, remote_req, remote_out, level, risk,
-                extra=["--is-dba"]))
-
-        def run_phase(timeout, extra=None):
-            return _run_sqlmap_remote(
-                ssh, task["request_text"], task_id, level, risk, timeout, extra
-            )
-    else:
-        # Local mode
+    if srv.get("is_local"):
+        # Local execution
         cmd_inject_str = " ".join(shlex.quote(p) for p in
             _build_cmd(sqlmap_path, request_file, output_dir, level, risk))
         cmd_update_str = " ".join(shlex.quote(p) for p in
@@ -430,6 +434,26 @@ def _execute_task(task_id):
         def run_phase(timeout, extra=None):
             cmd = _build_cmd(sqlmap_path, request_file, output_dir, level, risk, extra)
             return _run_sqlmap(cmd, timeout)
+    else:
+        # Remote SSH execution — build display strings with remote paths
+        remote_dir = f"/tmp/openclaw_{task_id}"
+        remote_req = f"{remote_dir}/request.txt"
+        remote_out = f"{remote_dir}/output"
+
+        cmd_inject_str = " ".join(shlex.quote(p) for p in
+            _build_cmd(sqlmap_path, remote_req, remote_out, level, risk))
+        cmd_update_str = " ".join(shlex.quote(p) for p in
+            _build_cmd(sqlmap_path, remote_req, remote_out, level, risk,
+                extra=["--sql-query=UPDATE information_schema.TABLES "
+                       "SET TABLE_COMMENT=TABLE_COMMENT WHERE 1=0"]))
+        cmd_dba_str = " ".join(shlex.quote(p) for p in
+            _build_cmd(sqlmap_path, remote_req, remote_out, level, risk,
+                extra=["--is-dba"]))
+
+        def run_phase(timeout, extra=None):
+            return _run_sqlmap_remote(
+                srv, task["request_text"], task_id, level, risk, timeout, extra
+            )
 
     db.update_task(
         task_id,
@@ -444,8 +468,8 @@ def _execute_task(task_id):
         _current_task_id = task_id
 
     full_log = ""
-    if ssh:
-        full_log += f"[remote] {ssh['user']}@{ssh['host']}:{ssh['port']}\n\n"
+    if not srv.get("is_local"):
+        full_log += f"[remote] {srv.get('user','root')}@{srv.get('host')}:{srv.get('port',22)}\n\n"
 
     error = None
     inject_data = {"inject_ok": 0}
@@ -534,8 +558,6 @@ def _execute_task(task_id):
                 )
         except Exception as db_err:
             print(f"[worker] failed to finalize task {task_id}: {db_err}", flush=True)
-            # Last-ditch attempt: at minimum flip status out of 'running'
-            # so the task doesn't stay stuck on the next restart.
             try:
                 with db.connect() as conn:
                     conn.execute(

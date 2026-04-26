@@ -331,37 +331,54 @@ def _execute_task(task_id):
         # Save all results regardless of how we got here (done or killed
         # externally), then update status atomically — only mark 'done'
         # if no one has set 'killed' on us in the meantime.
-        with db.connect() as conn:
-            conn.execute(
-                "UPDATE tasks SET "
-                "  finished_at=?,"
-                "  duration_sec=?,"
-                "  log=?,"
-                "  error=?,"
-                "  inject_ok=?,"
-                "  inject_param=?,"
-                "  inject_type=?,"
-                "  inject_payload=?,"
-                "  dbms=?,"
-                "  update_ok=?,"
-                "  is_dba=?,"
-                "  status=CASE WHEN status='killed' THEN 'killed' ELSE 'done' END "
-                "WHERE id=?",
-                (
-                    now_iso(),
-                    int(time.time() - started),
-                    full_log,
-                    error,
-                    inject_data.get("inject_ok"),
-                    inject_data.get("inject_param"),
-                    inject_data.get("inject_type"),
-                    inject_data.get("inject_payload"),
-                    inject_data.get("dbms"),
-                    update_ok if inject_data.get("inject_ok") else None,
-                    is_dba if inject_data.get("inject_ok") else None,
-                    task_id,
-                ),
-            )
+        # Wrap in try/except so a DB error here never leaves the task
+        # permanently stuck in 'running'.
+        try:
+            with db.connect() as conn:
+                conn.execute(
+                    "UPDATE tasks SET "
+                    "  finished_at=?,"
+                    "  duration_sec=?,"
+                    "  log=?,"
+                    "  error=?,"
+                    "  inject_ok=?,"
+                    "  inject_param=?,"
+                    "  inject_type=?,"
+                    "  inject_payload=?,"
+                    "  dbms=?,"
+                    "  update_ok=?,"
+                    "  is_dba=?,"
+                    "  status=CASE WHEN status='killed' THEN 'killed' ELSE 'done' END "
+                    "WHERE id=?",
+                    (
+                        now_iso(),
+                        int(time.time() - started),
+                        full_log,
+                        error,
+                        inject_data.get("inject_ok"),
+                        inject_data.get("inject_param"),
+                        inject_data.get("inject_type"),
+                        inject_data.get("inject_payload"),
+                        inject_data.get("dbms"),
+                        update_ok if inject_data.get("inject_ok") else None,
+                        is_dba if inject_data.get("inject_ok") else None,
+                        task_id,
+                    ),
+                )
+        except Exception as db_err:
+            print(f"[worker] failed to finalize task {task_id}: {db_err}", flush=True)
+            # Last-ditch attempt: at minimum flip status out of 'running'
+            # so the task doesn't stay stuck on the next restart.
+            try:
+                with db.connect() as conn:
+                    conn.execute(
+                        "UPDATE tasks SET status='done', finished_at=?, "
+                        "error='DB write failed during finalization' "
+                        "WHERE id=? AND status='running'",
+                        (now_iso(), task_id),
+                    )
+            except Exception:
+                pass
 
 
 def mark_killed(task_id):

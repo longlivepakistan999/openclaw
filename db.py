@@ -151,11 +151,3 @@ def reorder_pending(ids_in_order):
                 "UPDATE tasks SET queue_pos=? WHERE id=? AND status='pending'",
                 (i, tid),
             )
-
-
-def next_queue_pos():
-    with connect() as conn:
-        row = conn.execute(
-            "SELECT COALESCE(MAX(queue_pos), -1) + 1 AS n FROM tasks WHERE status='pending'"
-        ).fetchone()
-    return row["n"]

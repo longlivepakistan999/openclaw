@@ -267,20 +267,6 @@ tbody tr:last-child td{border-bottom:none}
           <label>超时（分钟）</label>
           <select id="reqTimeout"><option>5</option><option>10</option><option selected>15</option><option>30</option><option>60</option><option value="0">不限制</option></select>
         </div>
-        <div class="form-group">
-          <label>数据库类型</label>
-          <select id="reqDbms">
-            <option value="">自动检测</option>
-            <option>MySQL</option>
-            <option>Microsoft SQL Server</option>
-            <option>PostgreSQL</option>
-            <option>Oracle</option>
-            <option>SQLite</option>
-            <option>Access</option>
-            <option>IBM DB2</option>
-            <option>SAP MaxDB</option>
-          </select>
-        </div>
       </div>
       <div class="form-group">
         <label>备注（可选）</label>
@@ -640,7 +626,6 @@ $('btnStart').addEventListener('click', async () => {
       risk: parseInt($('reqRisk').value),
       timeout_min: parseInt($('reqTimeout').value) || 0,
       note: $('reqNote').value.trim(),
-      dbms_hint: $('reqDbms').value,
     };
     await api('/api/tasks', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
     closeModal('newScanModal');

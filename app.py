@@ -97,9 +97,7 @@ def create_task():
         return jsonify({"error": "note must be a string"}), 400
     note = note.strip()[:500]
 
-    dbms_hint = (data.get("dbms_hint") or "").strip()
-
-    task_id = scanner.create_task(request_text, level, risk, timeout_min, note=note, dbms_hint=dbms_hint)
+    task_id = scanner.create_task(request_text, level, risk, timeout_min, note=note)
     return jsonify({"id": task_id})
 
 

@@ -371,9 +371,7 @@ function updateTag(t) {
 }
 function dbaTag(t) {
   if (t.inject_ok !== 1) return '<span class="tag tag-na">— N/A</span>';
-  if (t.is_dba === 1) return '<span class="tag tag-root">✓ Root</span>';
-  if (t.is_dba === 0) return '<span class="tag tag-fail">✗ 非 Root</span>';
-  return '<span class="tag tag-na">— 未知</span>';
+  return t.is_dba === 1 ? '<span class="tag tag-root">✓ Root</span>' : '<span class="tag tag-fail">✗ 非 Root</span>';
 }
 function queueCell(t) {
   if (t.status === 'running') return '<span class="tag tag-now">▶ NOW</span>';

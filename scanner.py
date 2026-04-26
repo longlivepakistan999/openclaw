@@ -222,12 +222,13 @@ def _parse_update(output):
     return 0 if _UPDATE_FAIL_PATTERN.search(output) else 1
 
 
+_DBA_TRUE_PATTERN = re.compile(r"current user is DBA:\s*True", re.I)
+
+
 def _parse_dba(output):
-    """Returns 1/0 if sqlmap reported the result, None if no clear signal."""
-    m = re.search(r"current user is DBA:\s*(\w+)", output)
-    if not m:
-        return None
-    return 1 if m.group(1).strip().lower() == "true" else 0
+    """sqlmap --is-dba prints 'current user is DBA: True' or 'False'.
+    Match True → 1; anything else → 0."""
+    return 1 if _DBA_TRUE_PATTERN.search(output) else 0
 
 
 def _parse_current_user(output):

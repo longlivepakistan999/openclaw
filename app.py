@@ -6,6 +6,10 @@ import scanner
 
 app = Flask(__name__)
 
+# Start the background worker whenever this module is imported (covers both
+# direct execution and WSGI servers like Gunicorn that skip __main__).
+scanner.start_worker()
+
 
 @app.route("/")
 def index():
@@ -163,5 +167,4 @@ def batch():
 
 
 if __name__ == "__main__":
-    scanner.start_worker()
     app.run(host="0.0.0.0", port=5000, debug=False)

@@ -211,20 +211,17 @@ def _parse_injection(output):
 
 
 _UPDATE_FAIL_PATTERNS = [
-    r"command denied",
-    r"access denied",
-    r"permission denied",
-    r"not allowed",
-    r"no privilege",
-    r"insufficient privilege",
-    r"read[- ]only",
-    r"all tested parameters do not appear to be injectable",
-    r"unable to retrieve",
+    r"stacked queries are not supported",
+    r"execution of non-query SQL statements is only available when stacked queries are supported",
+    r"execution of custom SQL queries is only available when stacked queries are supported",
+    r"only SELECT statements? (?:are|is) allowed",
+    r"the SQL query provided is not a SELECT statement",
 ]
 
 
 def _parse_update(output):
-    """Blacklist: if any failure pattern matched, return 0; else 1."""
+    """Detect sqlmap's own message that UPDATE is not supported on this target.
+    If sqlmap printed a 'not supported / select-only' notice, return 0; else 1."""
     for pat in _UPDATE_FAIL_PATTERNS:
         if re.search(pat, output, re.I):
             return 0

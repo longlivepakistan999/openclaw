@@ -1,6 +1,3 @@
-import uuid
-from datetime import datetime
-
 from flask import Flask, jsonify, render_template, request
 
 import config
@@ -15,105 +12,25 @@ def index():
     return render_template("index.html")
 
 
-# ---------------------------------------------------------------------------
-# Servers
-# ---------------------------------------------------------------------------
-
-@app.get("/api/servers")
-def list_servers():
-    return jsonify(db.list_servers())
+@app.get("/api/settings")
+def get_settings():
+    return jsonify({
+        "sqlmap_path": db.get_setting("sqlmap_path", config.DEFAULT_SQLMAP_PATH),
+    })
 
 
-@app.post("/api/servers")
-def create_server():
+@app.post("/api/settings")
+def update_settings():
     data = request.get_json(force=True, silent=True)
     if not isinstance(data, dict):
         return jsonify({"error": "invalid JSON object"}), 400
-
-    name = (data.get("name") or "").strip()
-    if not name:
-        return jsonify({"error": "name required"}), 400
-
-    host = (data.get("host") or "").strip()
-    sqlmap_path = (data.get("sqlmap_path") or "").strip() or config.DEFAULT_SQLMAP_PATH
-
-    try:
-        port = int(data.get("port") or 22)
-    except (TypeError, ValueError):
-        return jsonify({"error": "port must be an integer"}), 400
-
-    server = {
-        "id": uuid.uuid4().hex[:8],
-        "name": name,
-        "is_local": 0,
-        "host": host,
-        "port": port,
-        "user": (data.get("user") or "root").strip(),
-        "key_path": (data.get("key_path") or "").strip(),
-        "sqlmap_path": sqlmap_path,
-        "created_at": datetime.now().isoformat(timespec="seconds"),
-    }
-    db.insert_server(server)
-    return jsonify({"id": server["id"]})
-
-
-@app.put("/api/servers/<server_id>")
-def update_server(server_id):
-    srv = db.get_server(server_id)
-    if not srv:
-        return jsonify({"error": "not found"}), 404
-
-    data = request.get_json(force=True, silent=True)
-    if not isinstance(data, dict):
-        return jsonify({"error": "invalid JSON object"}), 400
-
-    fields = {}
-    if "name" in data:
-        name = (data["name"] or "").strip()
-        if not name:
-            return jsonify({"error": "name required"}), 400
-        fields["name"] = name
     if "sqlmap_path" in data:
-        fields["sqlmap_path"] = (data["sqlmap_path"] or "").strip() or config.DEFAULT_SQLMAP_PATH
-
-    # These fields only apply to SSH servers
-    if not srv.get("is_local"):
-        if "host" in data:
-            fields["host"] = (data["host"] or "").strip()
-        if "port" in data:
-            try:
-                fields["port"] = int(data["port"] or 22)
-            except (TypeError, ValueError):
-                return jsonify({"error": "port must be an integer"}), 400
-        if "user" in data:
-            fields["user"] = (data["user"] or "root").strip()
-        if "key_path" in data:
-            fields["key_path"] = (data["key_path"] or "").strip()
-
-    db.update_server(server_id, **fields)
+        path = data["sqlmap_path"]
+        if not isinstance(path, str):
+            return jsonify({"error": "sqlmap_path must be a string"}), 400
+        db.set_setting("sqlmap_path", path.strip())
     return jsonify({"ok": True})
 
-
-@app.delete("/api/servers/<server_id>")
-def delete_server(server_id):
-    if server_id == "local":
-        return jsonify({"error": "cannot delete the local server"}), 400
-    srv = db.get_server(server_id)
-    if not srv:
-        return jsonify({"error": "not found"}), 404
-    db.delete_server(server_id)
-    return jsonify({"ok": True})
-
-
-@app.post("/api/servers/<server_id>/test")
-def test_server(server_id):
-    ok, msg = scanner.test_server_connection(server_id)
-    return jsonify({"ok": ok, "message": msg})
-
-
-# ---------------------------------------------------------------------------
-# Tasks
-# ---------------------------------------------------------------------------
 
 @app.get("/api/tasks")
 def list_tasks():
@@ -176,13 +93,7 @@ def create_task():
         return jsonify({"error": "note must be a string"}), 400
     note = note.strip()[:500]
 
-    server_id = (data.get("server_id") or "local").strip()
-    if not db.get_server(server_id):
-        return jsonify({"error": "server not found"}), 400
-
-    task_id = scanner.create_task(
-        request_text, level, risk, timeout_min, note=note, server_id=server_id
-    )
+    task_id = scanner.create_task(request_text, level, risk, timeout_min, note=note)
     return jsonify({"id": task_id})
 
 

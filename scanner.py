@@ -1,4 +1,3 @@
-import io
 import os
 import re
 import shlex
@@ -14,10 +13,8 @@ import db
 
 
 _runtime_lock = threading.Lock()
-_current_process = None       # local mode: Popen
+_current_process = None
 _current_task_id = None
-_current_ssh_client = None    # remote mode: paramiko SSHClient
-_current_remote_dir = None    # remote mode: temp dir path on remote host
 _wakeup = threading.Event()
 
 
@@ -35,7 +32,7 @@ def parse_host(request_text):
     return m.group(1) if m else "unknown"
 
 
-def create_task(request_text, level, risk, timeout_min, note="", server_id="local"):
+def create_task(request_text, level, risk, timeout_min, note=""):
     task_id = uuid.uuid4().hex[:8]
     host = parse_host(request_text)
     task_dir = os.path.join(config.SCANS_DIR, task_id)
@@ -56,7 +53,6 @@ def create_task(request_text, level, risk, timeout_min, note="", server_id="loca
             "request_text": request_text,
             "log": "",
             "created_at": now_iso(),
-            "server_id": server_id or "local",
         })
     except Exception:
         # Roll back: don't leave an orphan directory if anything failed
@@ -80,30 +76,15 @@ def jump_queue(task_id):
 
 
 def kill_current(task_id):
-    global _current_process, _current_task_id, _current_ssh_client, _current_remote_dir
+    global _current_process, _current_task_id
     with _runtime_lock:
-        if _current_task_id != task_id:
+        if _current_task_id != task_id or _current_process is None:
             return False
-        if _current_process is not None:
-            # Local mode
-            try:
-                os.killpg(os.getpgid(_current_process.pid), signal.SIGKILL)
-            except (ProcessLookupError, OSError):
-                pass
-            return True
-        if _current_ssh_client is not None:
-            # Remote mode: kill sqlmap process on the remote host
-            remote_dir = _current_remote_dir
-            client = _current_ssh_client
-            try:
-                _, stdout, _ = client.exec_command(
-                    f"pkill -9 -f {shlex.quote(remote_dir)}"
-                )
-                stdout.channel.recv_exit_status()
-            except Exception:
-                pass
-            return True
-        return False
+        try:
+            os.killpg(os.getpgid(_current_process.pid), signal.SIGKILL)
+        except (ProcessLookupError, OSError):
+            pass
+        return True
 
 
 def rerun_task(task_id):
@@ -116,7 +97,6 @@ def rerun_task(task_id):
         old["risk"],
         old["timeout_min"],
         note=old.get("note") or "",
-        server_id=old.get("server_id") or "local",
     )
 
 
@@ -153,7 +133,8 @@ def _build_cmd(sqlmap_path, request_file, output_dir, level, risk, extra=None):
 
 
 def _run_sqlmap(cmd, timeout_sec):
-    """Run sqlmap locally, capture output. Returns (returncode, output, timed_out)."""
+    """Run sqlmap, capture output. Returns (returncode, output, timed_out).
+    Uses a reader thread so timeout works even when sqlmap stalls on output."""
     global _current_process
     proc = subprocess.Popen(
         cmd,
@@ -201,147 +182,6 @@ def _run_sqlmap(cmd, timeout_sec):
             _current_process = None
 
     return proc.returncode, "".join(output_lines), timed_out
-
-
-def _run_sqlmap_remote(srv, request_text, task_id, level, risk, timeout_sec, extra=None):
-    """Run sqlmap on a remote host via SSH. Returns (returncode, output, timed_out)."""
-    global _current_ssh_client, _current_remote_dir
-    try:
-        import paramiko
-    except ImportError:
-        return -1, "[!] paramiko not installed. Run: pip install paramiko\n", False
-
-    client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-    connect_kw = dict(
-        hostname=srv["host"],
-        port=int(srv.get("port") or 22),
-        username=srv.get("user") or "root",
-        timeout=15,
-    )
-    if srv.get("key_path"):
-        connect_kw["key_filename"] = srv["key_path"]
-
-    try:
-        client.connect(**connect_kw)
-    except Exception as e:
-        return -1, f"[!] SSH connect failed: {e}\n", False
-
-    remote_dir = f"/tmp/openclaw_{task_id}"
-    remote_request = f"{remote_dir}/request.txt"
-    remote_output = f"{remote_dir}/output"
-
-    output_lines = []
-    timed_out = False
-    returncode = -1
-
-    try:
-        # Create remote working dirs
-        _, stdout, _ = client.exec_command(f"mkdir -p {shlex.quote(remote_output)}")
-        stdout.channel.recv_exit_status()
-
-        # Upload request.txt via SFTP
-        sftp = client.open_sftp()
-        try:
-            sftp.putfo(io.BytesIO(request_text.encode("utf-8")), remote_request)
-        finally:
-            sftp.close()
-
-        sqlmap_path = srv.get("sqlmap_path") or config.DEFAULT_SQLMAP_PATH
-        cmd = _build_cmd(sqlmap_path, remote_request, remote_output, level, risk, extra)
-        cmd_str = " ".join(shlex.quote(p) for p in cmd)
-
-        with _runtime_lock:
-            _current_ssh_client = client
-            _current_remote_dir = remote_dir
-
-        transport = client.get_transport()
-        channel = transport.open_session()
-        channel.set_combine_stderr(True)
-        channel.exec_command(cmd_str)
-
-        start = time.time()
-        try:
-            while True:
-                if channel.recv_ready():
-                    data = channel.recv(65536).decode("utf-8", errors="replace")
-                    output_lines.append(data)
-                    continue
-                if channel.exit_status_ready() and not channel.recv_ready():
-                    break
-                if timeout_sec and (time.time() - start) > timeout_sec:
-                    timed_out = True
-                    try:
-                        kill_ch = transport.open_session()
-                        kill_ch.exec_command(f"pkill -9 -f {shlex.quote(remote_dir)}")
-                        kill_ch.recv_exit_status()
-                        kill_ch.close()
-                    except Exception:
-                        pass
-                    break
-                time.sleep(0.05)
-
-            if not timed_out:
-                returncode = channel.recv_exit_status()
-        finally:
-            channel.close()
-
-    finally:
-        with _runtime_lock:
-            _current_ssh_client = None
-            _current_remote_dir = None
-        try:
-            client.exec_command(f"rm -rf {shlex.quote(remote_dir)}")
-        except Exception:
-            pass
-        client.close()
-
-    return returncode, "".join(output_lines), timed_out
-
-
-def test_server_connection(server_id):
-    """Try to SSH in and run sqlmap --version. Returns (ok, message)."""
-    srv = db.get_server(server_id)
-    if not srv:
-        return False, "server not found"
-    if srv.get("is_local"):
-        import subprocess as sp
-        sqlmap = srv.get("sqlmap_path") or config.DEFAULT_SQLMAP_PATH
-        try:
-            r = sp.run([sqlmap, "--version"], capture_output=True, text=True, timeout=10)
-            ver = (r.stdout or r.stderr or "").strip().splitlines()[0] if (r.stdout or r.stderr) else ""
-            return True, ver or "ok"
-        except FileNotFoundError:
-            return False, f"sqlmap not found at {sqlmap}"
-        except Exception as e:
-            return False, str(e)
-    else:
-        try:
-            import paramiko
-        except ImportError:
-            return False, "paramiko not installed"
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        try:
-            connect_kw = dict(
-                hostname=srv["host"],
-                port=int(srv.get("port") or 22),
-                username=srv.get("user") or "root",
-                timeout=10,
-            )
-            if srv.get("key_path"):
-                connect_kw["key_filename"] = srv["key_path"]
-            client.connect(**connect_kw)
-            sqlmap = srv.get("sqlmap_path") or config.DEFAULT_SQLMAP_PATH
-            _, stdout, stderr = client.exec_command(f"{shlex.quote(sqlmap)} --version")
-            out = (stdout.read() or stderr.read()).decode("utf-8", errors="replace").strip()
-            ver = out.splitlines()[0] if out else "ok"
-            return True, ver
-        except Exception as e:
-            return False, str(e)
-        finally:
-            client.close()
 
 
 def _parse_injection(output):
@@ -407,8 +247,7 @@ def _execute_task(task_id):
     task = db.get_task(task_id)
     if not task:
         return
-
-    srv = db.get_server(task.get("server_id") or "local") or db.get_server("local")
+    sqlmap_path = db.get_setting("sqlmap_path", config.DEFAULT_SQLMAP_PATH)
     task_dir = os.path.join(config.SCANS_DIR, task_id)
     request_file = os.path.join(task_dir, "request.txt")
     output_dir = os.path.join(task_dir, "output")
@@ -416,68 +255,40 @@ def _execute_task(task_id):
 
     timeout_sec = task["timeout_min"] * 60 if task["timeout_min"] else None
     started = time.time()
-    level, risk = task["level"], task["risk"]
-    sqlmap_path = srv.get("sqlmap_path") or config.DEFAULT_SQLMAP_PATH
 
-    if srv.get("is_local"):
-        # Local execution
-        cmd_inject_str = " ".join(shlex.quote(p) for p in
-            _build_cmd(sqlmap_path, request_file, output_dir, level, risk))
-        cmd_update_str = " ".join(shlex.quote(p) for p in
-            _build_cmd(sqlmap_path, request_file, output_dir, level, risk,
-                extra=["--sql-query=UPDATE information_schema.TABLES "
-                       "SET TABLE_COMMENT=TABLE_COMMENT WHERE 1=0"]))
-        cmd_dba_str = " ".join(shlex.quote(p) for p in
-            _build_cmd(sqlmap_path, request_file, output_dir, level, risk,
-                extra=["--is-dba"]))
-
-        def run_phase(timeout, extra=None):
-            cmd = _build_cmd(sqlmap_path, request_file, output_dir, level, risk, extra)
-            return _run_sqlmap(cmd, timeout)
-    else:
-        # Remote SSH execution — build display strings with remote paths
-        remote_dir = f"/tmp/openclaw_{task_id}"
-        remote_req = f"{remote_dir}/request.txt"
-        remote_out = f"{remote_dir}/output"
-
-        cmd_inject_str = " ".join(shlex.quote(p) for p in
-            _build_cmd(sqlmap_path, remote_req, remote_out, level, risk))
-        cmd_update_str = " ".join(shlex.quote(p) for p in
-            _build_cmd(sqlmap_path, remote_req, remote_out, level, risk,
-                extra=["--sql-query=UPDATE information_schema.TABLES "
-                       "SET TABLE_COMMENT=TABLE_COMMENT WHERE 1=0"]))
-        cmd_dba_str = " ".join(shlex.quote(p) for p in
-            _build_cmd(sqlmap_path, remote_req, remote_out, level, risk,
-                extra=["--is-dba"]))
-
-        def run_phase(timeout, extra=None):
-            return _run_sqlmap_remote(
-                srv, task["request_text"], task_id, level, risk, timeout, extra
-            )
+    cmd_inject = _build_cmd(sqlmap_path, request_file, output_dir, task["level"], task["risk"])
+    cmd_update = _build_cmd(
+        sqlmap_path, request_file, output_dir, task["level"], task["risk"],
+        extra=[
+            "--sql-query=UPDATE information_schema.TABLES "
+            "SET TABLE_COMMENT=TABLE_COMMENT WHERE 1=0"
+        ],
+    )
+    cmd_dba = _build_cmd(
+        sqlmap_path, request_file, output_dir, task["level"], task["risk"],
+        extra=["--is-dba"],
+    )
 
     db.update_task(
         task_id,
         status="running",
         started_at=now_iso(),
-        cmd_inject=cmd_inject_str,
-        cmd_update=cmd_update_str,
-        cmd_dba=cmd_dba_str,
+        cmd_inject=" ".join(shlex.quote(p) for p in cmd_inject),
+        cmd_update=" ".join(shlex.quote(p) for p in cmd_update),
+        cmd_dba=" ".join(shlex.quote(p) for p in cmd_dba),
     )
 
     with _runtime_lock:
         _current_task_id = task_id
 
     full_log = ""
-    if not srv.get("is_local"):
-        full_log += f"[remote] {srv.get('user','root')}@{srv.get('host')}:{srv.get('port',22)}\n\n"
-
     error = None
     inject_data = {"inject_ok": 0}
     update_ok = None  # None = not tested; 0/1 = tested
     is_dba = None
 
     try:
-        rc, out, timed_out = run_phase(timeout_sec)
+        rc, out, timed_out = _run_sqlmap(cmd_inject, timeout_sec)
         full_log += "=== INJECTION DETECTION ===\n" + out + "\n"
 
         latest = db.get_task(task_id)
@@ -494,18 +305,14 @@ def _execute_task(task_id):
                 remain = timeout_sec - (time.time() - started) if timeout_sec else None
                 if (remain is None or remain > 0) and \
                    (db.get_task(task_id) or {}).get("status") != "killed":
-                    rc2, out2, t2 = run_phase(
-                        remain,
-                        extra=["--sql-query=UPDATE information_schema.TABLES "
-                               "SET TABLE_COMMENT=TABLE_COMMENT WHERE 1=0"],
-                    )
+                    rc2, out2, t2 = _run_sqlmap(cmd_update, remain)
                     full_log += "\n=== UPDATE TEST ===\n" + out2 + "\n"
                     if not t2:
                         update_ok = _parse_update(out2)
                     remain2 = timeout_sec - (time.time() - started) if timeout_sec else None
                     if (remain2 is None or remain2 > 0) and \
                        (db.get_task(task_id) or {}).get("status") != "killed":
-                        rc3, out3, t3 = run_phase(remain2, extra=["--is-dba"])
+                        rc3, out3, t3 = _run_sqlmap(cmd_dba, remain2)
                         full_log += "\n=== IS-DBA CHECK ===\n" + out3 + "\n"
                         if not t3:
                             is_dba = _parse_dba(out3)
@@ -558,6 +365,8 @@ def _execute_task(task_id):
                 )
         except Exception as db_err:
             print(f"[worker] failed to finalize task {task_id}: {db_err}", flush=True)
+            # Last-ditch attempt: at minimum flip status out of 'running'
+            # so the task doesn't stay stuck on the next restart.
             try:
                 with db.connect() as conn:
                     conn.execute(

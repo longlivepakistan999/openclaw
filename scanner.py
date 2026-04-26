@@ -182,7 +182,6 @@ def _parse_injection(output):
         "inject_type": None,
         "inject_payload": None,
         "dbms": None,
-        "current_user": None,
     }
     if "sqlmap identified the following injection point" in output:
         result["inject_ok"] = 1
@@ -229,27 +228,6 @@ def _parse_dba(output):
     """sqlmap --is-dba prints 'current user is DBA: True' or 'False'.
     Match True → 1; anything else → 0."""
     return 1 if _DBA_TRUE_PATTERN.search(output) else 0
-
-
-def _parse_current_user(output):
-    """sqlmap can print the current user in several formats:
-      - current user: 'root'@'localhost'
-      - [INFO] retrieved: 'root@localhost'
-      - [INFO] resumed: 'root@localhost'
-      - or as a bare value on its own line right before 'current user is DBA:'
-    """
-    m = re.search(r"current user:\s*'?([^'\n]+?)'?\s*$", output, re.MULTILINE)
-    if m and "is DBA" not in m.group(1):
-        return m.group(1).strip()
-    m = re.search(r"\[INFO\]\s+(?:retrieved|resumed):\s*(.+?)\s*$", output, re.MULTILINE)
-    if m:
-        return m.group(1).strip().replace("'", "")
-    m = re.search(r"^([^\[\s][^\n]{0,80})\s*\n\s*current user is DBA:", output, re.MULTILINE)
-    if m:
-        candidate = m.group(1).strip()
-        if re.match(r"^[\w\-.@%'\"\\]+$", candidate):
-            return candidate
-    return None
 
 
 def _execute_task(task_id):
@@ -310,7 +288,6 @@ def _execute_task(task_id):
             full_log += "\n[!] timeout reached, process killed\n"
         else:
             inject_data = _parse_injection(out)
-            inject_data["current_user"] = _parse_current_user(out)
 
             if inject_data["inject_ok"]:
                 remain = timeout_sec - (time.time() - started) if timeout_sec else None
@@ -326,8 +303,6 @@ def _execute_task(task_id):
                             full_log += "\n=== IS-DBA CHECK ===\n" + out3 + "\n"
                             if not t3:
                                 is_dba = _parse_dba(out3)
-                                if not inject_data.get("current_user"):
-                                    inject_data["current_user"] = _parse_current_user(out3)
     except FileNotFoundError as e:
         error = f"sqlmap not found: {e}"
         full_log += f"\n[!] {error}\n"
@@ -354,7 +329,6 @@ def _execute_task(task_id):
             inject_type=inject_data.get("inject_type"),
             inject_payload=inject_data.get("inject_payload"),
             dbms=inject_data.get("dbms"),
-            current_user=inject_data.get("current_user"),
             update_ok=update_ok if inject_data.get("inject_ok") else None,
             is_dba=is_dba if inject_data.get("inject_ok") else None,
         )

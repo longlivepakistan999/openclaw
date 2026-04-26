@@ -528,7 +528,6 @@ async function showDetail(id) {
         <div class="info-item"><div class="k">参数</div><div class="v">${escapeHtml(t.inject_param || '—')}</div></div>
         <div class="info-item"><div class="k">注入类型</div><div class="v">${escapeHtml(t.inject_type || '—')}</div></div>
         <div class="info-item"><div class="k">DBMS</div><div class="v">${escapeHtml(t.dbms || '—')}</div></div>
-        <div class="info-item"><div class="k">当前用户</div><div class="v">${escapeHtml(t.current_user || '—')}</div></div>
         <div class="info-item"><div class="k">UPDATE</div><div class="v" style="color:${t.update_ok===1?'#3fb950':'#7d8590'}">${t.update_ok===1?'允许':'不允许'}</div></div>
         <div class="info-item"><div class="k">DBA 权限</div><div class="v" style="color:${t.is_dba===1?'#a371f7':'#7d8590'}">${t.is_dba===1?'True':'False'}</div></div>
       </div>

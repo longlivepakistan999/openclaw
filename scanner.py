@@ -119,6 +119,9 @@ def _build_cmd(sqlmap_path, request_file, output_dir, level, risk, extra=None):
     # shlex.split honors quoted segments, so "/path with space/sqlmap" still
     # works when the user wraps it in quotes ("\"/path with space/sqlmap\"").
     cmd = shlex.split(sqlmap_path) if " " in sqlmap_path else [sqlmap_path]
+    # .py scripts must be run via python3, not executed directly
+    if cmd[0].endswith(".py"):
+        cmd = ["python3"] + cmd
     cmd += [
         "-r", request_file,
         "--batch",

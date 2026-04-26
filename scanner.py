@@ -132,6 +132,7 @@ def _build_cmd(sqlmap_path, request_file, output_dir, level, risk, extra=None):
     cmd += [
         "-r", request_file,
         "--batch",
+        "--answers=custom injection=Y,follow=Y,process=Y",
         f"--level={level}",
         f"--risk={risk}",
         f"--output-dir={output_dir}",

@@ -27,14 +27,21 @@ def update_settings():
     return jsonify({"ok": True})
 
 
+_HEAVY_FIELDS = ("log", "request_text", "cmd_inject", "cmd_update", "cmd_dba")
+
+
 @app.get("/api/tasks")
 def list_tasks():
     tasks = db.list_tasks()
     pending = [t for t in tasks if t["status"] == "pending"]
     pending_index = {t["id"]: i + 1 for i, t in enumerate(pending)}
+    summaries = []
     for t in tasks:
         t["queue_position"] = pending_index.get(t["id"])
-    return jsonify(tasks)
+        for f in _HEAVY_FIELDS:
+            t.pop(f, None)
+        summaries.append(t)
+    return jsonify(summaries)
 
 
 @app.get("/api/tasks/<task_id>")
@@ -90,8 +97,10 @@ def rerun(task_id):
 
 @app.delete("/api/tasks/<task_id>")
 def delete(task_id):
-    ok = scanner.delete_task(task_id)
-    if not ok:
+    result = scanner.delete_task(task_id)
+    if result == "not_found":
+        return jsonify({"error": "task not found"}), 404
+    if result == "running":
         return jsonify({"error": "cannot delete running task"}), 400
     return jsonify({"ok": True})
 
@@ -104,7 +113,7 @@ def batch():
     results = {}
     for tid in ids:
         if action == "delete":
-            results[tid] = scanner.delete_task(tid)
+            results[tid] = scanner.delete_task(tid) == "ok"
         elif action == "kill":
             t = db.get_task(tid)
             if t and t["status"] == "running":

@@ -313,7 +313,12 @@ let activeFilter = 'all';
 let currentDetailId = null;
 
 const $ = id => document.getElementById(id);
-function api(url, opts) { return fetch(url, opts).then(r => r.json()); }
+async function api(url, opts) {
+  const r = await fetch(url, opts);
+  const data = await r.json().catch(() => null);
+  if (!r.ok) throw new Error((data && data.error) || ('HTTP ' + r.status));
+  return data;
+}
 function openModal(id) { $(id).classList.add('show'); }
 function closeModal(id) { $(id).classList.remove('show'); }
 function showToast(msg, isErr) {
@@ -483,7 +488,7 @@ async function doAction(act, id) {
     else if (act === 'rerun') await api(`/api/tasks/${id}/rerun`, {method:'POST'});
     showToast('操作成功');
     refresh();
-  } catch (e) { showToast('操作失败', true); }
+  } catch (e) { showToast('操作失败：' + e.message, true); }
 }
 
 async function doBatch(action) {
@@ -500,9 +505,9 @@ async function doBatch(action) {
   refresh();
 }
 
-function showDetail(id) {
-  const t = allTasks.find(x => x.id === id);
-  if (!t) return;
+async function showDetail(id) {
+  const t = await api(`/api/tasks/${id}`);
+  if (!t || t.error === 'not found') return;
   currentDetailId = id;
   $('detailTitle').innerHTML = `任务详情 — ${escapeHtml(t.host)} <span style="color:#7d8590;font-weight:400;font-size:12px;margin-left:8px">${escapeHtml(t.id)}</span>`;
   const badges = [];

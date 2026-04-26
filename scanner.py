@@ -93,13 +93,18 @@ def rerun_task(task_id):
 
 
 def delete_task(task_id):
+    """Returns: 'ok', 'not_found', or 'running'."""
     task = db.get_task(task_id)
     if not task:
-        return False
+        return "not_found"
     if task["status"] == "running":
-        return False
+        return "running"
     db.delete_task(task_id)
-    return True
+    task_dir = os.path.join(config.SCANS_DIR, task_id)
+    if os.path.isdir(task_dir):
+        import shutil
+        shutil.rmtree(task_dir, ignore_errors=True)
+    return "ok"
 
 
 def _build_cmd(sqlmap_path, request_file, output_dir, level, risk, extra=None):
@@ -284,7 +289,7 @@ def _execute_task(task_id):
                     full_log += "\n=== UPDATE TEST ===\n" + out2 + "\n"
                     if not t2:
                         update_ok = _parse_update(out2)
-                    if not (db.get_task(task_id) or {}).get("status") == "killed":
+                    if (db.get_task(task_id) or {}).get("status") != "killed":
                         remain2 = timeout_sec - (time.time() - started) if timeout_sec else None
                         if remain2 is None or remain2 > 0:
                             rc3, out3, t3 = _run_sqlmap(cmd_dba, remain2)
@@ -326,8 +331,13 @@ def _execute_task(task_id):
 
 
 def mark_killed(task_id):
-    """Used by API: mark status=killed before/while killing process."""
-    db.update_task(task_id, status="killed", finished_at=now_iso())
+    """Mark status=killed only if currently running or pending (avoids overwriting done)."""
+    with db.connect() as conn:
+        conn.execute(
+            "UPDATE tasks SET status='killed', finished_at=? "
+            "WHERE id=? AND status IN ('running','pending')",
+            (now_iso(), task_id),
+        )
 
 
 def _worker_loop():

@@ -148,13 +148,20 @@ def _run_sqlmap(cmd, timeout_sec):
     global _current_process
     proc = subprocess.Popen(
         cmd,
-        stdin=subprocess.DEVNULL,
+        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
         start_new_session=True,
     )
+    # Pre-fill stdin with Y answers so interactive prompts that --batch
+    # misses in some sqlmap dev builds get answered automatically.
+    try:
+        proc.stdin.write('Y\n' * 10)
+        proc.stdin.close()
+    except Exception:
+        pass
     with _runtime_lock:
         _current_process = proc
 

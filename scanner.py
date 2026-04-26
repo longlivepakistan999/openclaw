@@ -36,22 +36,31 @@ def create_task(request_text, level, risk, timeout_min, note=""):
     task_id = uuid.uuid4().hex[:8]
     host = parse_host(request_text)
     task_dir = os.path.join(config.SCANS_DIR, task_id)
-    os.makedirs(task_dir, exist_ok=True)
-    with open(os.path.join(task_dir, "request.txt"), "w", encoding="utf-8") as f:
-        f.write(request_text)
 
-    db.insert_task({
-        "id": task_id,
-        "host": host,
-        "note": note,
-        "level": level,
-        "risk": risk,
-        "timeout_min": timeout_min,
-        "status": "pending",
-        "request_text": request_text,
-        "log": "",
-        "created_at": now_iso(),
-    })
+    try:
+        os.makedirs(task_dir, exist_ok=True)
+        with open(os.path.join(task_dir, "request.txt"), "w", encoding="utf-8") as f:
+            f.write(request_text)
+
+        db.insert_task({
+            "id": task_id,
+            "host": host,
+            "note": note,
+            "level": level,
+            "risk": risk,
+            "timeout_min": timeout_min,
+            "status": "pending",
+            "request_text": request_text,
+            "log": "",
+            "created_at": now_iso(),
+        })
+    except Exception:
+        # Roll back: don't leave an orphan directory if anything failed
+        if os.path.isdir(task_dir):
+            import shutil
+            shutil.rmtree(task_dir, ignore_errors=True)
+        raise
+
     _wakeup.set()
     return task_id
 
@@ -294,18 +303,21 @@ def _execute_task(task_id):
 
             if inject_data["inject_ok"]:
                 remain = timeout_sec - (time.time() - started) if timeout_sec else None
-                if remain is None or remain > 0:
+                # Re-check killed before launching the next sqlmap process,
+                # so a kill landing between phases doesn't get a free run.
+                if (remain is None or remain > 0) and \
+                   (db.get_task(task_id) or {}).get("status") != "killed":
                     rc2, out2, t2 = _run_sqlmap(cmd_update, remain)
                     full_log += "\n=== UPDATE TEST ===\n" + out2 + "\n"
                     if not t2:
                         update_ok = _parse_update(out2)
-                    if (db.get_task(task_id) or {}).get("status") != "killed":
-                        remain2 = timeout_sec - (time.time() - started) if timeout_sec else None
-                        if remain2 is None or remain2 > 0:
-                            rc3, out3, t3 = _run_sqlmap(cmd_dba, remain2)
-                            full_log += "\n=== IS-DBA CHECK ===\n" + out3 + "\n"
-                            if not t3:
-                                is_dba = _parse_dba(out3)
+                    remain2 = timeout_sec - (time.time() - started) if timeout_sec else None
+                    if (remain2 is None or remain2 > 0) and \
+                       (db.get_task(task_id) or {}).get("status") != "killed":
+                        rc3, out3, t3 = _run_sqlmap(cmd_dba, remain2)
+                        full_log += "\n=== IS-DBA CHECK ===\n" + out3 + "\n"
+                        if not t3:
+                            is_dba = _parse_dba(out3)
     except FileNotFoundError as e:
         error = f"sqlmap not found: {e}"
         full_log += f"\n[!] {error}\n"
@@ -316,25 +328,40 @@ def _execute_task(task_id):
         with _runtime_lock:
             _current_task_id = None
 
-        # Don't overwrite a 'killed' status
-        latest = db.get_task(task_id)
-        final_status = "done" if (latest and latest["status"] != "killed") else "killed"
-
-        db.update_task(
-            task_id,
-            status=final_status,
-            finished_at=now_iso(),
-            duration_sec=int(time.time() - started),
-            log=full_log,
-            error=error,
-            inject_ok=inject_data.get("inject_ok"),
-            inject_param=inject_data.get("inject_param"),
-            inject_type=inject_data.get("inject_type"),
-            inject_payload=inject_data.get("inject_payload"),
-            dbms=inject_data.get("dbms"),
-            update_ok=update_ok if inject_data.get("inject_ok") else None,
-            is_dba=is_dba if inject_data.get("inject_ok") else None,
-        )
+        # Save all results regardless of how we got here (done or killed
+        # externally), then update status atomically — only mark 'done'
+        # if no one has set 'killed' on us in the meantime.
+        with db.connect() as conn:
+            conn.execute(
+                "UPDATE tasks SET "
+                "  finished_at=?,"
+                "  duration_sec=?,"
+                "  log=?,"
+                "  error=?,"
+                "  inject_ok=?,"
+                "  inject_param=?,"
+                "  inject_type=?,"
+                "  inject_payload=?,"
+                "  dbms=?,"
+                "  update_ok=?,"
+                "  is_dba=?,"
+                "  status=CASE WHEN status='killed' THEN 'killed' ELSE 'done' END "
+                "WHERE id=?",
+                (
+                    now_iso(),
+                    int(time.time() - started),
+                    full_log,
+                    error,
+                    inject_data.get("inject_ok"),
+                    inject_data.get("inject_param"),
+                    inject_data.get("inject_type"),
+                    inject_data.get("inject_payload"),
+                    inject_data.get("dbms"),
+                    update_ok if inject_data.get("inject_ok") else None,
+                    is_dba if inject_data.get("inject_ok") else None,
+                    task_id,
+                ),
+            )
 
 
 def mark_killed(task_id):

@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>SQLMap Web - Dashboard</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #13141a; color: #c9d1d9; font-family: -apple-system, 'Segoe UI', sans-serif; font-size: 14px; }
+
+  /* Sidebar */
+  .sidebar { width: 260px; background: #0d0e14; border-right: 1px solid #21262d; height: 100vh; position: fixed; left: 0; top: 0; display: flex; flex-direction: column; }
+  .logo { padding: 20px 20px 16px; border-bottom: 1px solid #21262d; }
+  .logo h1 { font-size: 16px; font-weight: 700; color: #fff; letter-spacing: .5px; }
+  .logo h1 span { color: #e85d04; }
+  .logo p { font-size: 11px; color: #555; margin-top: 2px; }
+  .nav { padding: 12px 10px; flex: 1; overflow-y: auto; }
+  .nav-label { font-size: 10px; color: #444; letter-spacing: 2px; text-transform: uppercase; padding: 8px 10px 4px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; cursor: pointer; color: #7d8590; font-size: 13px; margin-bottom: 2px; transition: all .15s; }
+  .nav-item:hover { background: #21262d; color: #c9d1d9; }
+  .nav-item.active { background: #1f2937; color: #fff; }
+  .nav-item .icon { width: 16px; text-align: center; font-size: 14px; }
+  .nav-item .badge { margin-left: auto; background: #e85d04; color: #fff; font-size: 10px; padding: 1px 6px; border-radius: 10px; }
+  .nav-item .badge.green { background: #238636; }
+  .nav-item .badge.purple { background: #6e40c9; }
+  .config-box { padding: 14px; border-top: 1px solid #21262d; }
+  .config-box label { font-size: 11px; color: #555; display: block; margin-bottom: 4px; }
+  .config-box input { width: 100%; background: #0d0e14; border: 1px solid #30363d; color: #c9d1d9; padding: 6px 10px; border-radius: 5px; font-size: 12px; outline: none; }
+  .config-box input:focus { border-color: #58a6ff; }
+  .config-box button { width: 100%; margin-top: 6px; background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 6px; border-radius: 5px; cursor: pointer; font-size: 12px; }
+  .config-box button:hover { background: #30363d; }
+
+  /* Main */
+  .main { margin-left: 260px; min-height: 100vh; }
+  .topbar { padding: 16px 24px; border-bottom: 1px solid #21262d; display: flex; align-items: center; justify-content: space-between; background: #0d0e14; }
+  .topbar h2 { font-size: 15px; font-weight: 600; color: #fff; }
+  .new-scan-btn { background: #238636; border: none; color: #fff; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+  .new-scan-btn:hover { background: #2ea043; }
+  .content { padding: 20px 24px; }
+
+  /* Stats cards */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+  .stat-card { background: #161b22; border: 1px solid #21262d; border-radius: 8px; padding: 16px; }
+  .stat-card .label { font-size: 12px; color: #7d8590; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .stat-card .value { font-size: 28px; font-weight: 700; color: #fff; }
+  .stat-card .sub { font-size: 11px; color: #555; margin-top: 4px; }
+  .stat-card.green { border-top: 2px solid #238636; }
+  .stat-card.red { border-top: 2px solid #da3633; }
+  .stat-card.orange { border-top: 2px solid #e85d04; }
+  .stat-card.purple { border-top: 2px solid #6e40c9; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot.green { background: #238636; }
+  .dot.red { background: #da3633; }
+  .dot.orange { background: #e85d04; }
+  .dot.purple { background: #6e40c9; }
+
+  /* Filters */
+  .filter-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .ftag { border: 1px solid #30363d; background: transparent; color: #7d8590; padding: 5px 14px; border-radius: 20px; cursor: pointer; font-size: 12px; transition: all .15s; }
+  .ftag:hover { border-color: #58a6ff; color: #58a6ff; }
+  .ftag.active { border-color: #58a6ff; color: #58a6ff; background: #58a6ff18; }
+
+  /* Table */
+  .table-wrap { background: #161b22; border: 1px solid #21262d; border-radius: 8px; overflow: hidden; }
+  .table-header { padding: 12px 16px; border-bottom: 1px solid #21262d; display: flex; align-items: center; justify-content: space-between; }
+  .table-header span { font-size: 13px; font-weight: 600; color: #fff; }
+  table { width: 100%; border-collapse: collapse; }
+  th { padding: 10px 16px; text-align: left; font-size: 11px; color: #7d8590; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid #21262d; font-weight: 500; background: #0d1117; }
+  td { padding: 12px 16px; border-bottom: 1px solid #161b22; vertical-align: middle; }
+  tbody tr { transition: background .1s; cursor: pointer; }
+  tbody tr:hover { background: #21262d44; }
+  tbody tr:last-child td { border-bottom: none; }
+  .td-host { font-weight: 500; color: #58a6ff; font-size: 13px; }
+  .td-id { font-size: 11px; color: #444; font-family: monospace; }
+  .td-time { font-size: 12px; color: #555; }
+
+  /* Status badges */
+  .tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 500; }
+  .tag-ok { background: #1a4a1a; color: #3fb950; border: 1px solid #238636; }
+  .tag-fail { background: #3d1212; color: #f85149; border: 1px solid #da3633; }
+  .tag-na { background: #1c2129; color: #444; border: 1px solid #30363d; }
+  .tag-root { background: #2d1f5e; color: #a371f7; border: 1px solid #6e40c9; }
+  .tag-running { background: #2a1f00; color: #e3b341; border: 1px solid #9e6a03; animation: pulse .8s infinite alternate; }
+  @keyframes pulse { from{opacity:.7} to{opacity:1} }
+
+  /* Modal */
+  .overlay { display: none; position: fixed; inset: 0; background: #00000088; z-index: 200; }
+  .overlay.show { display: flex; align-items: center; justify-content: center; }
+  .modal { background: #161b22; border: 1px solid #30363d; border-radius: 10px; width: 700px; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; }
+  .modal-head { padding: 16px 20px; border-bottom: 1px solid #21262d; display: flex; justify-content: space-between; align-items: center; }
+  .modal-head h3 { font-size: 14px; font-weight: 600; color: #fff; }
+  .modal-close { background: none; border: none; color: #7d8590; font-size: 18px; cursor: pointer; }
+  .modal-close:hover { color: #fff; }
+  .modal-body { padding: 16px 20px; overflow-y: auto; }
+  .badge-row { display: flex; gap: 8px; margin-bottom: 14px; }
+  .log-pre { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 14px; font-family: 'Courier New', monospace; font-size: 11px; line-height: 1.8; color: #7d8590; white-space: pre-wrap; max-height: 340px; overflow-y: auto; }
+  .log-pre .ok { color: #3fb950; }
+  .log-pre .warn { color: #e3b341; }
+  .log-pre .info { color: #58a6ff; }
+
+  /* New scan modal */
+  .form-group { margin-bottom: 14px; }
+  .form-group label { display: block; font-size: 12px; color: #7d8590; margin-bottom: 6px; }
+  .form-group textarea { width: 100%; background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; border-radius: 6px; padding: 10px; font-family: 'Courier New', monospace; font-size: 12px; resize: vertical; min-height: 180px; outline: none; }
+  .form-group textarea:focus { border-color: #58a6ff; }
+  .form-group select { background: #0d1117; border: 1px solid #30363d; color: #c9d1d9; border-radius: 5px; padding: 7px 10px; font-size: 13px; outline: none; }
+  .form-group select:focus { border-color: #58a6ff; }
+  .form-row2 { display: flex; gap: 12px; }
+  .modal-foot { padding: 14px 20px; border-top: 1px solid #21262d; display: flex; justify-content: flex-end; gap: 10px; }
+  .btn-cancel { background: transparent; border: 1px solid #30363d; color: #7d8590; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .btn-cancel:hover { border-color: #555; color: #c9d1d9; }
+  .btn-start { background: #238636; border: none; color: #fff; padding: 8px 20px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
+  .btn-start:hover { background: #2ea043; }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="logo">
+    <h1>SQLMap <span>Web</span></h1>
+    <p>自动化注入检测平台</p>
+  </div>
+  <div class="nav">
+    <div class="nav-label">导航</div>
+    <div class="nav-item active"><span class="icon">⊞</span> 任务列表 <span class="badge">6</span></div>
+    <div class="nav-item"><span class="icon">◉</span> 运行中 <span class="badge" style="background:#e3b341;color:#000">1</span></div>
+    <div class="nav-label">筛选</div>
+    <div class="nav-item"><span class="icon">✓</span> 注入成功 <span class="badge green">4</span></div>
+    <div class="nav-item"><span class="icon">✗</span> 注入失败</div>
+    <div class="nav-item"><span class="icon">✎</span> 允许 UPDATE <span class="badge green">3</span></div>
+    <div class="nav-item"><span class="icon">⚑</span> Root 权限 <span class="badge purple">1</span></div>
+  </div>
+  <div class="config-box">
+    <label>SQLMAP 路径</label>
+    <input type="text" value="/usr/bin/sqlmap">
+    <button>保存配置</button>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <h2>扫描任务</h2>
+    <button class="new-scan-btn" onclick="document.getElementById('newScanModal').classList.add('show')">＋ 新建扫描</button>
+  </div>
+  <div class="content">
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card green">
+        <div class="label"><span class="dot green"></span>注入成功</div>
+        <div class="value">4</div>
+        <div class="sub">共 6 个任务</div>
+      </div>
+      <div class="stat-card red">
+        <div class="label"><span class="dot red"></span>注入失败</div>
+        <div class="value">2</div>
+        <div class="sub">无注入点</div>
+      </div>
+      <div class="stat-card orange">
+        <div class="label"><span class="dot orange"></span>允许 UPDATE</div>
+        <div class="value">3</div>
+        <div class="sub">可写入操作</div>
+      </div>
+      <div class="stat-card purple">
+        <div class="label"><span class="dot purple"></span>Root 权限</div>
+        <div class="value">1</div>
+        <div class="sub">DBA 权限</div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-row">
+      <button class="ftag active">全部 (6)</button>
+      <button class="ftag">注入成功 (4)</button>
+      <button class="ftag">注入失败 (2)</button>
+      <button class="ftag">允许 UPDATE (3)</button>
+      <button class="ftag">Root 权限 (1)</button>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <div class="table-header">
+        <span>扫描记录</span>
+        <span style="font-size:12px;color:#555">共 6 条</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>任务 ID</th>
+            <th>Host</th>
+            <th>注入检测</th>
+            <th>UPDATE</th>
+            <th>Root</th>
+            <th>状态</th>
+            <th>创建时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr onclick="document.getElementById('detailModal').classList.add('show')">
+            <td class="td-id">a3f2c1d8</td>
+            <td class="td-host">shop.target.com</td>
+            <td><span class="tag tag-ok">✓ 成功</span></td>
+            <td><span class="tag tag-ok">✓ 允许</span></td>
+            <td><span class="tag tag-root">✓ Root</span></td>
+            <td><span class="tag tag-ok">完成</span></td>
+            <td class="td-time">2026-04-25 14:32</td>
+          </tr>
+          <tr>
+            <td class="td-id">b9e1f4a2</td>
+            <td class="td-host">api.target.com</td>
+            <td><span class="tag tag-ok">✓ 成功</span></td>
+            <td><span class="tag tag-ok">✓ 允许</span></td>
+            <td><span class="tag tag-na">— 否</span></td>
+            <td><span class="tag tag-ok">完成</span></td>
+            <td class="td-time">2026-04-25 13:55</td>
+          </tr>
+          <tr>
+            <td class="td-id">c5d8e2b1</td>
+            <td class="td-host">www.vuln-site.com</td>
+            <td><span class="tag tag-running">◉ 检测中</span></td>
+            <td><span class="tag tag-na">— 待测</span></td>
+            <td><span class="tag tag-na">— 待测</span></td>
+            <td><span class="tag tag-running">运行中</span></td>
+            <td class="td-time">2026-04-25 14:40</td>
+          </tr>
+          <tr>
+            <td class="td-id">d1c3f9e4</td>
+            <td class="td-host">login.demo.com</td>
+            <td><span class="tag tag-fail">✗ 失败</span></td>
+            <td><span class="tag tag-na">— N/A</span></td>
+            <td><span class="tag tag-na">— N/A</span></td>
+            <td><span class="tag tag-ok">完成</span></td>
+            <td class="td-time">2026-04-25 13:20</td>
+          </tr>
+          <tr>
+            <td class="td-id">e7a2b5c3</td>
+            <td class="td-host">old.legacy-app.net</td>
+            <td><span class="tag tag-ok">✓ 成功</span></td>
+            <td><span class="tag tag-ok">✓ 允许</span></td>
+            <td><span class="tag tag-na">— 否</span></td>
+            <td><span class="tag tag-ok">完成</span></td>
+            <td class="td-time">2026-04-25 12:48</td>
+          </tr>
+          <tr>
+            <td class="td-id">f4e6d2a8</td>
+            <td class="td-host">test.internal.corp</td>
+            <td><span class="tag tag-fail">✗ 失败</span></td>
+            <td><span class="tag tag-na">— N/A</span></td>
+            <td><span class="tag tag-na">— N/A</span></td>
+            <td><span class="tag tag-ok">完成</span></td>
+            <td class="td-time">2026-04-25 12:05</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Detail Modal -->
+<div class="overlay show" id="detailModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>任务详情 — shop.target.com</h3>
+      <button class="modal-close" onclick="document.getElementById('detailModal').classList.remove('show')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="badge-row">
+        <span class="tag tag-ok">注入 ✓</span>
+        <span class="tag tag-ok">UPDATE ✓</span>
+        <span class="tag tag-root">Root ✓</span>
+      </div>
+      <div class="log-pre"><span class="info">        ___
+       __H__
+ ___ ___[)]_____ ___ ___  {1.8.2#stable}</span>
+
+<span class="warn">[*] starting @ 14:32:01</span>
+[INFO] parsing HTTP request from 'request.txt'
+[INFO] testing connection to the target URL
+<span class="ok">[INFO] testing if the target URL content is stable</span>
+[INFO] testing 'AND boolean-based blind'
+[INFO] testing 'MySQL >= 5.1 AND error-based'
+<span class="ok">[INFO] GET parameter 'username' appears to be injectable</span>
+<span class="ok">[INFO] sqlmap identified injection point(s):
+---
+Parameter: username (POST)
+    Type: boolean-based blind
+    Payload: username=admin' AND 8888=8888--
+---</span>
+[INFO] testing UPDATE privilege...
+<span class="ok">[INFO] UPDATE executed successfully (0 rows affected)</span>
+[INFO] testing --is-dba...
+<span class="ok">[INFO] current user is DBA: True</span>
+<span class="warn">[*] ending @ 14:32:14</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- New Scan Modal -->
+<div class="overlay" id="newScanModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>新建扫描任务</h3>
+      <button class="modal-close" onclick="document.getElementById('newScanModal').classList.remove('show')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>HTTP 请求包（用 * 标记注入点）</label>
+        <textarea placeholder="POST /login HTTP/1.1&#10;Host: target.com&#10;Content-Type: application/x-www-form-urlencoded&#10;Cookie: session=abc123&#10;&#10;username=admin*&password=123456"></textarea>
+      </div>
+      <div class="form-row2">
+        <div class="form-group">
+          <label>Level</label>
+          <select>
+            <option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Risk</label>
+          <select>
+            <option>1</option><option selected>2</option><option>3</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="document.getElementById('newScanModal').classList.remove('show')">取消</button>
+      <button class="btn-start">开始扫描</button>
+    </div>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.ftag').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.ftag').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>

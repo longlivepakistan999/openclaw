@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>SQLMap Web - Minimal</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #f5f6f8; color: #1a1a2e; font-family: -apple-system, 'Segoe UI', sans-serif; font-size: 14px; }
+
+  /* Top nav */
+  .nav { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 56px; }
+  .nav-brand { font-size: 16px; font-weight: 700; color: #1a1a2e; display: flex; align-items: center; gap: 8px; }
+  .nav-brand .dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; display: inline-block; }
+  .nav-right { display: flex; align-items: center; gap: 12px; }
+  .config-row { display: flex; align-items: center; gap: 8px; }
+  .config-row label { font-size: 12px; color: #888; }
+  .config-row input { border: 1px solid #e5e7eb; border-radius: 5px; padding: 5px 10px; font-size: 12px; color: #333; outline: none; width: 220px; background: #fafafa; }
+  .config-row input:focus { border-color: #6366f1; background: #fff; }
+  .new-btn { background: #6366f1; color: #fff; border: none; padding: 8px 18px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .new-btn:hover { background: #4f46e5; }
+
+  /* Content */
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 32px; }
+
+  /* Stats row */
+  .stats { display: flex; gap: 14px; margin-bottom: 20px; }
+  .stat-box { flex: 1; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px 20px; display: flex; align-items: center; gap: 14px; }
+  .stat-icon { width: 38px; height: 38px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .si-green { background: #dcfce7; }
+  .si-red { background: #fee2e2; }
+  .si-amber { background: #fef3c7; }
+  .si-purple { background: #ede9fe; }
+  .stat-info { flex: 1; }
+  .stat-info .val { font-size: 22px; font-weight: 700; color: #1a1a2e; }
+  .stat-info .lbl { font-size: 12px; color: #888; margin-top: 1px; }
+
+  /* Filter tabs */
+  .tabs { display: flex; gap: 0; margin-bottom: 16px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 4px; width: fit-content; }
+  .tab { padding: 7px 18px; border-radius: 6px; cursor: pointer; font-size: 13px; color: #666; transition: all .15s; white-space: nowrap; }
+  .tab:hover { color: #1a1a2e; }
+  .tab.active { background: #6366f1; color: #fff; font-weight: 500; }
+  .tab .cnt { font-size: 11px; margin-left: 4px; opacity: .75; }
+
+  /* Table */
+  .table-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+  .table-top { padding: 14px 20px; border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; justify-content: space-between; }
+  .table-top span { font-size: 14px; font-weight: 600; color: #1a1a2e; }
+  .table-top small { font-size: 12px; color: #aaa; }
+  table { width: 100%; border-collapse: collapse; }
+  th { padding: 10px 16px; text-align: left; font-size: 11px; color: #aaa; letter-spacing: 1px; text-transform: uppercase; font-weight: 600; background: #fafafa; border-bottom: 1px solid #f3f4f6; }
+  td { padding: 13px 16px; border-bottom: 1px solid #f9fafb; vertical-align: middle; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr { cursor: pointer; transition: background .1s; }
+  tbody tr:hover { background: #f9fafb; }
+  .td-host { font-weight: 500; color: #6366f1; }
+  .td-id { font-size: 11px; color: #ccc; font-family: monospace; }
+  .td-time { font-size: 12px; color: #bbb; }
+
+  /* Chips */
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+  .chip-ok { background: #dcfce7; color: #16a34a; }
+  .chip-fail { background: #fee2e2; color: #dc2626; }
+  .chip-na { background: #f3f4f6; color: #9ca3af; }
+  .chip-root { background: #ede9fe; color: #7c3aed; }
+  .chip-run { background: #fef3c7; color: #d97706; animation: breathe .8s infinite alternate; }
+  @keyframes breathe { from{opacity:.7} to{opacity:1} }
+
+  /* Drawer */
+  .drawer-bg { display: none; position: fixed; inset: 0; background: #00000033; z-index: 100; }
+  .drawer-bg.show { display: block; }
+  .drawer { position: fixed; right: -520px; top: 0; bottom: 0; width: 520px; background: #fff; border-left: 1px solid #e5e7eb; z-index: 101; transition: right .25s ease; overflow-y: auto; }
+  .drawer.open { right: 0; }
+  .drawer-head { padding: 18px 20px; border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; justify-content: space-between; }
+  .drawer-head h3 { font-size: 14px; font-weight: 600; }
+  .drawer-close { background: none; border: none; color: #aaa; font-size: 20px; cursor: pointer; }
+  .drawer-close:hover { color: #333; }
+  .drawer-body { padding: 18px 20px; }
+  .chip-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  .log-area { background: #1a1a2e; border-radius: 6px; padding: 14px; font-family: 'Courier New', monospace; font-size: 11px; line-height: 1.8; color: #7d8590; white-space: pre-wrap; max-height: 420px; overflow-y: auto; }
+  .log-area .ok { color: #4ade80; }
+  .log-area .warn { color: #fbbf24; }
+  .log-area .info { color: #60a5fa; }
+
+  /* New scan panel (inline below table) */
+  .scan-panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; margin-bottom: 20px; display: none; }
+  .scan-panel.show { display: block; }
+  .scan-panel h3 { font-size: 14px; font-weight: 600; margin-bottom: 14px; }
+  .scan-panel textarea { width: 100%; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px; font-family: 'Courier New', monospace; font-size: 12px; resize: vertical; min-height: 160px; outline: none; color: #333; }
+  .scan-panel textarea:focus { border-color: #6366f1; }
+  .sel-row { display: flex; gap: 12px; margin-top: 10px; align-items: center; }
+  .sel-row select { border: 1px solid #e5e7eb; border-radius: 5px; padding: 7px 10px; font-size: 13px; outline: none; color: #333; }
+  .sel-row select:focus { border-color: #6366f1; }
+  .sel-row .go-btn { margin-left: auto; background: #6366f1; color: #fff; border: none; padding: 8px 22px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .sel-row .go-btn:hover { background: #4f46e5; }
+  .sel-row .cancel-btn { background: #f3f4f6; color: #666; border: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .sel-row .cancel-btn:hover { background: #e5e7eb; }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<div class="nav">
+  <div class="nav-brand"><span class="dot"></span>SQLMap Web</div>
+  <div class="nav-right">
+    <div class="config-row">
+      <label>sqlmap 路径</label>
+      <input type="text" value="/usr/bin/sqlmap">
+    </div>
+    <button class="new-btn" onclick="togglePanel()">＋ 新建扫描</button>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat-box">
+      <div class="stat-icon si-green">✓</div>
+      <div class="stat-info"><div class="val">4</div><div class="lbl">注入成功</div></div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-icon si-red">✗</div>
+      <div class="stat-info"><div class="val">2</div><div class="lbl">注入失败</div></div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-icon si-amber">✎</div>
+      <div class="stat-info"><div class="val">3</div><div class="lbl">允许 UPDATE</div></div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-icon si-purple">⚑</div>
+      <div class="stat-info"><div class="val">1</div><div class="lbl">Root 权限</div></div>
+    </div>
+  </div>
+
+  <!-- New scan panel -->
+  <div class="scan-panel" id="scanPanel">
+    <h3>新建扫描任务</h3>
+    <textarea placeholder="粘贴 HTTP 请求包，用 * 标记注入点&#10;&#10;POST /login HTTP/1.1&#10;Host: target.com&#10;&#10;username=admin*&password=123"></textarea>
+    <div class="sel-row">
+      <span style="font-size:12px;color:#888">Level</span>
+      <select><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select>
+      <span style="font-size:12px;color:#888">Risk</span>
+      <select><option>1</option><option selected>2</option><option>3</option></select>
+      <button class="cancel-btn" onclick="togglePanel()">取消</button>
+      <button class="go-btn">开始扫描</button>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="tabs">
+    <div class="tab active">全部<span class="cnt">6</span></div>
+    <div class="tab">注入成功<span class="cnt">4</span></div>
+    <div class="tab">注入失败<span class="cnt">2</span></div>
+    <div class="tab">允许 UPDATE<span class="cnt">3</span></div>
+    <div class="tab">Root 权限<span class="cnt">1</span></div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-card">
+    <div class="table-top"><span>扫描记录</span><small>6 条记录</small></div>
+    <table>
+      <thead>
+        <tr>
+          <th>Task ID</th>
+          <th>Host</th>
+          <th>注入检测</th>
+          <th>UPDATE</th>
+          <th>Root</th>
+          <th>创建时间</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr onclick="openDrawer()">
+          <td class="td-id">a3f2c1d8</td>
+          <td class="td-host">shop.target.com</td>
+          <td><span class="chip chip-ok">✓ 成功</span></td>
+          <td><span class="chip chip-ok">✓ 允许</span></td>
+          <td><span class="chip chip-root">✓ Root</span></td>
+          <td class="td-time">2026-04-25 14:32</td>
+        </tr>
+        <tr>
+          <td class="td-id">b9e1f4a2</td>
+          <td class="td-host">api.target.com</td>
+          <td><span class="chip chip-ok">✓ 成功</span></td>
+          <td><span class="chip chip-ok">✓ 允许</span></td>
+          <td><span class="chip chip-na">— 否</span></td>
+          <td class="td-time">2026-04-25 13:55</td>
+        </tr>
+        <tr>
+          <td class="td-id">c5d8e2b1</td>
+          <td class="td-host">www.vuln-site.com</td>
+          <td><span class="chip chip-run">◉ 检测中</span></td>
+          <td><span class="chip chip-na">— 待测</span></td>
+          <td><span class="chip chip-na">— 待测</span></td>
+          <td class="td-time">2026-04-25 14:40</td>
+        </tr>
+        <tr>
+          <td class="td-id">d1c3f9e4</td>
+          <td class="td-host">login.demo.com</td>
+          <td><span class="chip chip-fail">✗ 失败</span></td>
+          <td><span class="chip chip-na">— N/A</span></td>
+          <td><span class="chip chip-na">— N/A</span></td>
+          <td class="td-time">2026-04-25 13:20</td>
+        </tr>
+        <tr>
+          <td class="td-id">e7a2b5c3</td>
+          <td class="td-host">old.legacy-app.net</td>
+          <td><span class="chip chip-ok">✓ 成功</span></td>
+          <td><span class="chip chip-ok">✓ 允许</span></td>
+          <td><span class="chip chip-na">— 否</span></td>
+          <td class="td-time">2026-04-25 12:48</td>
+        </tr>
+        <tr>
+          <td class="td-id">f4e6d2a8</td>
+          <td class="td-host">test.internal.corp</td>
+          <td><span class="chip chip-fail">✗ 失败</span></td>
+          <td><span class="chip chip-na">— N/A</span></td>
+          <td><span class="chip chip-na">— N/A</span></td>
+          <td class="td-time">2026-04-25 12:05</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Drawer -->
+<div class="drawer-bg show" id="drawerBg" onclick="closeDrawer()"></div>
+<div class="drawer open" id="drawer">
+  <div class="drawer-head">
+    <h3>shop.target.com — a3f2c1d8</h3>
+    <button class="drawer-close" onclick="closeDrawer()">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="chip-row">
+      <span class="chip chip-ok">注入 ✓</span>
+      <span class="chip chip-ok">UPDATE ✓</span>
+      <span class="chip chip-root">Root ✓</span>
+    </div>
+    <div class="log-area"><span class="info">        ___
+       __H__
+ ___ ___[)]_____ ___ ___  {1.8.2#stable}</span>
+
+<span class="warn">[*] starting @ 14:32:01</span>
+[INFO] parsing HTTP request from 'request.txt'
+[INFO] testing connection to the target URL
+<span class="ok">[INFO] target URL content is stable</span>
+[INFO] testing 'AND boolean-based blind'
+[INFO] testing 'MySQL >= 5.1 AND error-based'
+<span class="ok">[INFO] username appears to be injectable</span>
+<span class="ok">[INFO] identified injection point(s):
+---
+Parameter: username (POST)
+    Type: boolean-based blind
+    Payload: username=admin' AND 8888=8888--
+---</span>
+[INFO] testing UPDATE privilege...
+<span class="ok">[INFO] UPDATE executed (0 rows affected)</span>
+[INFO] testing --is-dba...
+<span class="ok">[INFO] current user is DBA: True</span>
+<span class="warn">[*] ending @ 14:32:14</span></div>
+  </div>
+</div>
+
+<script>
+function togglePanel() {
+  document.getElementById('scanPanel').classList.toggle('show');
+}
+function openDrawer() {
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerBg').classList.add('show');
+}
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawerBg').classList.remove('show');
+}
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', function() {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>

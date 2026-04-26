@@ -170,9 +170,22 @@ tbody tr:last-child td{border-bottom:none}
     <div class="nav-item" data-filter="killed"><span class="icon">■</span> 已终止 <span class="badge dark" id="cnt-killed">0</span></div>
   </div>
   <div class="config-box">
-    <label>SQLMAP 路径</label>
-    <input type="text" id="sqlmapPath" value="/usr/bin/sqlmap">
-    <button id="saveCfg">保存配置</button>
+    <label>SQLMAP 路径（本机）</label>
+    <input type="text" id="sqlmapPath" placeholder="/usr/bin/sqlmap">
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #21262d">
+      <div style="font-size:10px;color:#444;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px">远程执行（留空=本地）</div>
+      <label>SSH Host</label>
+      <input type="text" id="remoteHost" placeholder="192.168.1.10">
+      <label style="margin-top:5px">SSH Port</label>
+      <input type="text" id="remotePort" placeholder="22">
+      <label style="margin-top:5px">SSH User</label>
+      <input type="text" id="remoteUser" placeholder="root">
+      <label style="margin-top:5px">私钥路径（Server B 上）</label>
+      <input type="text" id="remoteKeyPath" placeholder="/root/.ssh/id_rsa">
+      <label style="margin-top:5px">远程 sqlmap 路径</label>
+      <input type="text" id="remoteSqlmapPath" placeholder="/usr/bin/sqlmap">
+    </div>
+    <button id="saveCfg" style="margin-top:8px">保存配置</button>
   </div>
 </div>
 
@@ -636,13 +649,31 @@ $('detailDel').addEventListener('click', async () => {
 });
 
 $('saveCfg').addEventListener('click', async () => {
-  await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({sqlmap_path: $('sqlmapPath').value})});
-  showToast('配置已保存');
+  try {
+    await api('/api/settings', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        sqlmap_path:        $('sqlmapPath').value,
+        remote_host:        $('remoteHost').value,
+        remote_port:        $('remotePort').value,
+        remote_user:        $('remoteUser').value,
+        remote_key_path:    $('remoteKeyPath').value,
+        remote_sqlmap_path: $('remoteSqlmapPath').value,
+      }),
+    });
+    showToast('配置已保存');
+  } catch(e) { showToast('保存失败：' + e.message, true); }
 });
 
 (async () => {
   const cfg = await api('/api/settings');
-  $('sqlmapPath').value = cfg.sqlmap_path || '/usr/bin/sqlmap';
+  $('sqlmapPath').value        = cfg.sqlmap_path        || '/usr/bin/sqlmap';
+  $('remoteHost').value        = cfg.remote_host        || '';
+  $('remotePort').value        = cfg.remote_port        || '';
+  $('remoteUser').value        = cfg.remote_user        || '';
+  $('remoteKeyPath').value     = cfg.remote_key_path    || '';
+  $('remoteSqlmapPath').value  = cfg.remote_sqlmap_path || '';
   await refresh();
   setInterval(refresh, 3000);
 })();

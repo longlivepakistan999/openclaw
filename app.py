@@ -12,11 +12,16 @@ def index():
     return render_template("index.html")
 
 
+_SSH_FIELDS = ("remote_host", "remote_port", "remote_user",
+               "remote_key_path", "remote_sqlmap_path")
+
+
 @app.get("/api/settings")
 def get_settings():
-    return jsonify({
-        "sqlmap_path": db.get_setting("sqlmap_path", config.DEFAULT_SQLMAP_PATH),
-    })
+    result = {"sqlmap_path": db.get_setting("sqlmap_path", config.DEFAULT_SQLMAP_PATH)}
+    for f in _SSH_FIELDS:
+        result[f] = db.get_setting(f, "")
+    return jsonify(result)
 
 
 @app.post("/api/settings")
@@ -29,6 +34,12 @@ def update_settings():
         if not isinstance(path, str):
             return jsonify({"error": "sqlmap_path must be a string"}), 400
         db.set_setting("sqlmap_path", path.strip())
+    for f in _SSH_FIELDS:
+        if f in data:
+            val = data[f]
+            if not isinstance(val, str):
+                return jsonify({"error": f"{f} must be a string"}), 400
+            db.set_setting(f, val.strip())
     return jsonify({"ok": True})
 
 

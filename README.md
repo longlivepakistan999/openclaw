@@ -233,6 +233,74 @@ certbot --nginx -d scan.example.com
 
 ---
 
+## 远程执行（Server A 跑 sqlmap，Server B 跑 Web）
+
+适合目标网络只有 Server A 能访问的场景。Web 界面和数据库在 Server B，sqlmap 在 Server A 上执行，通过 SSH 传文件、取结果。**Server A 只需要有 sqlmap 和 SSH，不需要部署任何额外代码。**
+
+```
+[ 浏览器 ] → [ Server B: Flask + SQLite ]
+                        ↓ SSH
+               [ Server A: sqlmap ]
+                        ↓ 访问目标
+               [ 目标服务器 ]
+```
+
+### Server A 准备
+
+```bash
+# 安装 sqlmap
+pip3 install sqlmap
+which sqlmap   # 记下路径
+
+# 允许 Server B 的 SSH 公钥登录
+cat /server-b/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+```
+
+### Server B 准备（Web 服务器）
+
+```bash
+# 生成 SSH 密钥对（如果没有）
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N ""
+
+# 测试能免密登录 Server A
+ssh -i ~/.ssh/id_rsa user@<server-a-ip> "sqlmap --version"
+```
+
+### 配置 Web 界面
+
+启动后，左侧栏「远程执行」区域填写：
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| SSH Host | Server A 的 IP 或域名 | `192.168.1.10` |
+| SSH Port | SSH 端口 | `22` |
+| SSH User | 登录用户名 | `root` |
+| 私钥路径 | Server B 上私钥的绝对路径 | `/root/.ssh/id_rsa` |
+| 远程 sqlmap 路径 | Server A 上 sqlmap 的路径 | `/usr/local/bin/sqlmap` |
+
+SSH Host 留空 = 本地模式，填写后自动切换到远程模式。
+
+### 工作流程
+
+每个任务执行时：
+1. SSH 连接 Server A
+2. 在 Server A 创建 `/tmp/openclaw_<task_id>/`
+3. 通过 SFTP 上传 `request.txt`
+4. 在 Server A 上执行 sqlmap，实时读取输出
+5. 执行完毕后删除 Server A 上的临时文件
+6. 结果保存到 Server B 的 SQLite 数据库
+
+终止任务时，会通过 SSH 向 Server A 发送 `pkill -9` 杀掉对应进程。
+
+### 注意事项
+
+- Server B 到 Server A 的 SSH 连接使用私钥认证，不推荐用密码
+- Server A 的 `/tmp` 需要有写入权限
+- 如果 Server A 和 Server B 的 sqlmap 版本不同，以 Server A 实际版本为准
+- 防火墙只需开放 Server B → Server A 的 SSH（22端口），目标网络无需对 Server B 可达
+
+---
+
 ## 目录结构
 
 ```

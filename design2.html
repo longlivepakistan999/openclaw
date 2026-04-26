@@ -80,7 +80,22 @@
   .tag-na { background: #1c2129; color: #444; border: 1px solid #30363d; }
   .tag-root { background: #2d1f5e; color: #a371f7; border: 1px solid #6e40c9; }
   .tag-running { background: #2a1f00; color: #e3b341; border: 1px solid #9e6a03; animation: pulse .8s infinite alternate; }
+  .tag-pending { background: #1c2129; color: #7d8590; border: 1px solid #30363d; }
+  .tag-killed { background: #2a1212; color: #ff7b72; border: 1px solid #8b2a2a; }
+  .tag-queue { background: #0d2840; color: #58a6ff; border: 1px solid #1f6feb; font-family: monospace; font-weight: 600; }
+  .tag-now { background: #2a1f00; color: #e3b341; border: 1px solid #9e6a03; font-weight: 600; }
   @keyframes pulse { from{opacity:.7} to{opacity:1} }
+
+  /* Action buttons in table */
+  .row-actions { display: flex; gap: 6px; }
+  .act-btn { background: transparent; border: 1px solid #30363d; color: #7d8590; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; transition: all .15s; }
+  .act-btn:hover { background: #21262d; }
+  .act-jump { border-color: #1f6feb; color: #58a6ff; }
+  .act-jump:hover { background: #1f6feb22; }
+  .act-kill { border-color: #8b2a2a; color: #f85149; }
+  .act-kill:hover { background: #8b2a2a44; }
+  .act-na { color: #333; cursor: default; border-color: transparent; }
+  .act-na:hover { background: transparent; }
 
   /* Modal */
   .overlay { display: none; position: fixed; inset: 0; background: #00000088; z-index: 200; }
@@ -122,13 +137,15 @@
   </div>
   <div class="nav">
     <div class="nav-label">导航</div>
-    <div class="nav-item active"><span class="icon">⊞</span> 任务列表 <span class="badge">6</span></div>
+    <div class="nav-item active"><span class="icon">⊞</span> 任务列表 <span class="badge">12</span></div>
     <div class="nav-item"><span class="icon">◉</span> 运行中 <span class="badge" style="background:#e3b341;color:#000">1</span></div>
+    <div class="nav-item"><span class="icon">⏱</span> 排队中 <span class="badge" style="background:#1f6feb">4</span></div>
     <div class="nav-label">筛选</div>
     <div class="nav-item"><span class="icon">✓</span> 注入成功 <span class="badge green">4</span></div>
-    <div class="nav-item"><span class="icon">✗</span> 注入失败</div>
+    <div class="nav-item"><span class="icon">✗</span> 注入失败 <span class="badge" style="background:#da3633">2</span></div>
     <div class="nav-item"><span class="icon">✎</span> 允许 UPDATE <span class="badge green">3</span></div>
     <div class="nav-item"><span class="icon">⚑</span> Root 权限 <span class="badge purple">1</span></div>
+    <div class="nav-item"><span class="icon">■</span> 已终止 <span class="badge" style="background:#8b2a2a">1</span></div>
   </div>
   <div class="config-box">
     <label>SQLMAP 路径</label>
@@ -146,11 +163,16 @@
   <div class="content">
 
     <!-- Stats -->
-    <div class="stats-grid">
+    <div class="stats-grid" style="grid-template-columns: repeat(5, 1fr);">
+      <div class="stat-card" style="border-top:2px solid #1f6feb">
+        <div class="label"><span class="dot" style="background:#1f6feb"></span>队列状态</div>
+        <div class="value">1<span style="font-size:14px;color:#7d8590;font-weight:400"> / 4</span></div>
+        <div class="sub">运行中 / 排队中</div>
+      </div>
       <div class="stat-card green">
         <div class="label"><span class="dot green"></span>注入成功</div>
         <div class="value">4</div>
-        <div class="sub">共 6 个任务</div>
+        <div class="sub">共 12 个任务</div>
       </div>
       <div class="stat-card red">
         <div class="label"><span class="dot red"></span>注入失败</div>
@@ -171,85 +193,168 @@
 
     <!-- Filters -->
     <div class="filter-row">
-      <button class="ftag active">全部 (6)</button>
+      <button class="ftag active">全部 (12)</button>
+      <button class="ftag">运行中 (1)</button>
+      <button class="ftag">排队中 (4)</button>
       <button class="ftag">注入成功 (4)</button>
       <button class="ftag">注入失败 (2)</button>
       <button class="ftag">允许 UPDATE (3)</button>
       <button class="ftag">Root 权限 (1)</button>
+      <button class="ftag">已终止 (1)</button>
     </div>
 
     <!-- Table -->
     <div class="table-wrap">
       <div class="table-header">
         <span>扫描记录</span>
-        <span style="font-size:12px;color:#555">共 6 条</span>
+        <span style="font-size:12px;color:#555">共 12 条 · 运行中 1 · 排队中 4</span>
       </div>
       <table>
         <thead>
           <tr>
+            <th style="width:60px">队列</th>
             <th>任务 ID</th>
             <th>Host</th>
-            <th>注入检测</th>
+            <th>注入</th>
             <th>UPDATE</th>
             <th>Root</th>
             <th>状态</th>
-            <th>创建时间</th>
+            <th>时间</th>
+            <th style="width:140px">操作</th>
           </tr>
         </thead>
         <tbody>
-          <tr onclick="document.getElementById('detailModal').classList.add('show')">
-            <td class="td-id">a3f2c1d8</td>
-            <td class="td-host">shop.target.com</td>
-            <td><span class="tag tag-ok">✓ 成功</span></td>
-            <td><span class="tag tag-ok">✓ 允许</span></td>
-            <td><span class="tag tag-root">✓ Root</span></td>
-            <td><span class="tag tag-ok">完成</span></td>
-            <td class="td-time">2026-04-25 14:32</td>
-          </tr>
           <tr>
-            <td class="td-id">b9e1f4a2</td>
-            <td class="td-host">api.target.com</td>
-            <td><span class="tag tag-ok">✓ 成功</span></td>
-            <td><span class="tag tag-ok">✓ 允许</span></td>
-            <td><span class="tag tag-na">— 否</span></td>
-            <td><span class="tag tag-ok">完成</span></td>
-            <td class="td-time">2026-04-25 13:55</td>
-          </tr>
-          <tr>
+            <td><span class="tag tag-now">▶ NOW</span></td>
             <td class="td-id">c5d8e2b1</td>
             <td class="td-host">www.vuln-site.com</td>
             <td><span class="tag tag-running">◉ 检测中</span></td>
             <td><span class="tag tag-na">— 待测</span></td>
             <td><span class="tag tag-na">— 待测</span></td>
             <td><span class="tag tag-running">运行中</span></td>
-            <td class="td-time">2026-04-25 14:40</td>
+            <td class="td-time">14:40:12</td>
+            <td><div class="row-actions"><button class="act-btn act-kill" onclick="event.stopPropagation();alert('终止任务 c5d8e2b1?')">■ 终止</button></div></td>
           </tr>
           <tr>
-            <td class="td-id">d1c3f9e4</td>
-            <td class="td-host">login.demo.com</td>
-            <td><span class="tag tag-fail">✗ 失败</span></td>
-            <td><span class="tag tag-na">— N/A</span></td>
-            <td><span class="tag tag-na">— N/A</span></td>
+            <td><span class="tag tag-queue">#1</span></td>
+            <td class="td-id">g8h2k4m9</td>
+            <td class="td-host">admin.demo.io</td>
+            <td><span class="tag tag-na">— 待测</span></td>
+            <td><span class="tag tag-na">— 待测</span></td>
+            <td><span class="tag tag-na">— 待测</span></td>
+            <td><span class="tag tag-pending">⏱ 排队</span></td>
+            <td class="td-time">14:42:01</td>
+            <td><div class="row-actions"><button class="act-btn act-jump" onclick="event.stopPropagation();alert('插队到队首?')">↑ 插队</button></div></td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-queue">#2</span></td>
+            <td class="td-id">h3j7n5p2</td>
+            <td class="td-host">portal.client-x.com</td>
+            <td><span class="tag tag-na">— 待测</span></td>
+            <td><span class="tag tag-na">— 待测</span></td>
+            <td><span class="tag tag-na">— 待测</span></td>
+            <td><span class="tag tag-pending">⏱ 排队</span></td>
+            <td class="td-time">14:43:18</td>
+            <td><div class="row-actions"><button class="act-btn act-jump" onclick="event.stopPropagation();alert('插队到队首?')">↑ 插队</button></div></td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-queue">#3</span></td>
+            <td class="td-id">k6m1q8r4</td>
+            <td class="td-host">cms.target-2.net</td>
+            <td><span class="tag tag-na">— 待测</span></td>
+            <td><span class="tag tag-na">— 待测</span></td>
+            <td><span class="tag tag-na">— 待测</span></td>
+            <td><span class="tag tag-pending">⏱ 排队</span></td>
+            <td class="td-time">14:44:25</td>
+            <td><div class="row-actions"><button class="act-btn act-jump" onclick="event.stopPropagation();alert('插队到队首?')">↑ 插队</button></div></td>
+          </tr>
+          <tr>
+            <td><span class="tag tag-queue">#4</span></td>
+            <td class="td-id">n2p9s5t7</td>
+            <td class="td-host">forum.example.org</td>
+            <td><span class="tag tag-na">— 待测</span></td>
+            <td><span class="tag tag-na">— 待测</span></td>
+            <td><span class="tag tag-na">— 待测</span></td>
+            <td><span class="tag tag-pending">⏱ 排队</span></td>
+            <td class="td-time">14:45:50</td>
+            <td><div class="row-actions"><button class="act-btn act-jump" onclick="event.stopPropagation();alert('插队到队首?')">↑ 插队</button></div></td>
+          </tr>
+          <tr onclick="document.getElementById('detailModal').classList.add('show')">
+            <td><span style="color:#444">—</span></td>
+            <td class="td-id">a3f2c1d8</td>
+            <td class="td-host">shop.target.com</td>
+            <td><span class="tag tag-ok">✓ 成功</span></td>
+            <td><span class="tag tag-ok">✓ 允许</span></td>
+            <td><span class="tag tag-root">✓ Root</span></td>
             <td><span class="tag tag-ok">完成</span></td>
-            <td class="td-time">2026-04-25 13:20</td>
+            <td class="td-time">14:32:01</td>
+            <td><div class="row-actions"><span class="act-btn act-na">—</span></div></td>
           </tr>
           <tr>
+            <td><span style="color:#444">—</span></td>
+            <td class="td-id">b9e1f4a2</td>
+            <td class="td-host">api.target.com</td>
+            <td><span class="tag tag-ok">✓ 成功</span></td>
+            <td><span class="tag tag-ok">✓ 允许</span></td>
+            <td><span class="tag tag-na">— 否</span></td>
+            <td><span class="tag tag-ok">完成</span></td>
+            <td class="td-time">13:55:44</td>
+            <td><div class="row-actions"><span class="act-btn act-na">—</span></div></td>
+          </tr>
+          <tr>
+            <td><span style="color:#444">—</span></td>
+            <td class="td-id">u4v8w2x6</td>
+            <td class="td-host">staging.app.io</td>
+            <td><span class="tag tag-ok">✓ 成功</span></td>
+            <td><span class="tag tag-ok">✓ 允许</span></td>
+            <td><span class="tag tag-na">— 否</span></td>
+            <td><span class="tag tag-ok">完成</span></td>
+            <td class="td-time">13:38:22</td>
+            <td><div class="row-actions"><span class="act-btn act-na">—</span></div></td>
+          </tr>
+          <tr>
+            <td><span style="color:#444">—</span></td>
             <td class="td-id">e7a2b5c3</td>
             <td class="td-host">old.legacy-app.net</td>
             <td><span class="tag tag-ok">✓ 成功</span></td>
             <td><span class="tag tag-ok">✓ 允许</span></td>
             <td><span class="tag tag-na">— 否</span></td>
             <td><span class="tag tag-ok">完成</span></td>
-            <td class="td-time">2026-04-25 12:48</td>
+            <td class="td-time">12:48:33</td>
+            <td><div class="row-actions"><span class="act-btn act-na">—</span></div></td>
           </tr>
           <tr>
+            <td><span style="color:#444">—</span></td>
+            <td class="td-id">d1c3f9e4</td>
+            <td class="td-host">login.demo.com</td>
+            <td><span class="tag tag-fail">✗ 失败</span></td>
+            <td><span class="tag tag-na">— N/A</span></td>
+            <td><span class="tag tag-na">— N/A</span></td>
+            <td><span class="tag tag-ok">完成</span></td>
+            <td class="td-time">13:20:08</td>
+            <td><div class="row-actions"><span class="act-btn act-na">—</span></div></td>
+          </tr>
+          <tr>
+            <td><span style="color:#444">—</span></td>
             <td class="td-id">f4e6d2a8</td>
             <td class="td-host">test.internal.corp</td>
             <td><span class="tag tag-fail">✗ 失败</span></td>
             <td><span class="tag tag-na">— N/A</span></td>
             <td><span class="tag tag-na">— N/A</span></td>
             <td><span class="tag tag-ok">完成</span></td>
-            <td class="td-time">2026-04-25 12:05</td>
+            <td class="td-time">12:05:17</td>
+            <td><div class="row-actions"><span class="act-btn act-na">—</span></div></td>
+          </tr>
+          <tr>
+            <td><span style="color:#444">—</span></td>
+            <td class="td-id">y9z3a7b1</td>
+            <td class="td-host">debug.broken-site.org</td>
+            <td><span class="tag tag-killed">■ 已终止</span></td>
+            <td><span class="tag tag-na">— N/A</span></td>
+            <td><span class="tag tag-na">— N/A</span></td>
+            <td><span class="tag tag-killed">已终止</span></td>
+            <td class="td-time">11:42:55</td>
+            <td><div class="row-actions"><span class="act-btn act-na">—</span></div></td>
           </tr>
         </tbody>
       </table>

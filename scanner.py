@@ -123,7 +123,8 @@ def _build_cmd(sqlmap_path, request_file, output_dir, level, risk, extra=None):
 
 
 def _run_sqlmap(cmd, timeout_sec):
-    """Run sqlmap, capture output, return (returncode, output, killed_by_user, timed_out)."""
+    """Run sqlmap, capture output. Returns (returncode, output, timed_out).
+    Uses a reader thread so timeout works even when sqlmap stalls on output."""
     global _current_process
     proc = subprocess.Popen(
         cmd,
@@ -137,30 +138,40 @@ def _run_sqlmap(cmd, timeout_sec):
         _current_process = proc
 
     output_lines = []
-    timed_out = False
-    deadline = time.time() + timeout_sec if timeout_sec else None
-    try:
-        while True:
-            line = proc.stdout.readline()
-            if line:
+
+    def _reader():
+        try:
+            for line in iter(proc.stdout.readline, ''):
                 output_lines.append(line)
-            if proc.poll() is not None:
-                output_lines.append(proc.stdout.read())
-                break
-            if deadline and time.time() > deadline:
-                timed_out = True
-                try:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                except (ProcessLookupError, OSError):
-                    pass
-                proc.wait()
-                break
+        except Exception:
+            pass
+
+    reader = threading.Thread(target=_reader, daemon=True)
+    reader.start()
+
+    timed_out = False
+    try:
+        proc.wait(timeout=timeout_sec)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, OSError):
+            pass
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
     finally:
+        try:
+            proc.stdout.close()
+        except Exception:
+            pass
+        reader.join(timeout=2)
         with _runtime_lock:
             _current_process = None
 
-    output = "".join(output_lines)
-    return proc.returncode, output, timed_out
+    return proc.returncode, "".join(output_lines), timed_out
 
 
 def _parse_injection(output):
@@ -263,14 +274,13 @@ def _execute_task(task_id):
     full_log = ""
     error = None
     inject_data = {"inject_ok": 0}
-    update_ok = 0
-    is_dba = 0
+    update_ok = None  # None = not tested; 0/1 = tested
+    is_dba = None
 
     try:
         rc, out, timed_out = _run_sqlmap(cmd_inject, timeout_sec)
         full_log += "=== INJECTION DETECTION ===\n" + out + "\n"
 
-        # Was the task killed by user?
         latest = db.get_task(task_id)
         if latest and latest["status"] == "killed":
             return
@@ -342,16 +352,24 @@ def mark_killed(task_id):
 
 def _worker_loop():
     while True:
-        pending = db.list_pending_ordered()
-        if not pending:
-            _wakeup.wait(timeout=2.0)
-            _wakeup.clear()
-            continue
-        next_id = pending[0]["id"]
         try:
-            _execute_task(next_id)
+            pending = db.list_pending_ordered()
+            if not pending:
+                _wakeup.wait(timeout=2.0)
+                _wakeup.clear()
+                continue
+            next_id = pending[0]["id"]
+            try:
+                _execute_task(next_id)
+            except Exception as e:
+                try:
+                    db.update_task(next_id, status="done", error=str(e), finished_at=now_iso())
+                except Exception:
+                    pass
         except Exception as e:
-            db.update_task(next_id, status="done", error=str(e), finished_at=now_iso())
+            # never let the worker thread die
+            print(f"[worker] unexpected error: {type(e).__name__}: {e}", flush=True)
+            time.sleep(1)
 
 
 def start_worker():

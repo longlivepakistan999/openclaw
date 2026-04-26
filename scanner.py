@@ -132,7 +132,7 @@ def _run_sqlmap(cmd, timeout_sec):
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
-        preexec_fn=os.setsid,
+        start_new_session=True,
     )
     with _runtime_lock:
         _current_process = proc
@@ -223,10 +223,11 @@ def _parse_update(output):
 
 
 def _parse_dba(output):
+    """Returns 1/0 if sqlmap reported the result, None if no clear signal."""
     m = re.search(r"current user is DBA:\s*(\w+)", output)
-    if m:
-        return 1 if m.group(1).strip().lower() == "true" else 0
-    return 0
+    if not m:
+        return None
+    return 1 if m.group(1).strip().lower() == "true" else 0
 
 
 def _parse_current_user(output):

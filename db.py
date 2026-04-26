@@ -48,6 +48,13 @@ def init_db():
             "INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)",
             ("sqlmap_path", config.DEFAULT_SQLMAP_PATH),
         )
+        # Recover from a crash: any task left in 'running' state has no
+        # owner process. Mark it as killed so the user can clean it up.
+        conn.execute(
+            "UPDATE tasks SET status='killed', "
+            "error=COALESCE(error,'') || ' [orphaned by restart]' "
+            "WHERE status='running'"
+        )
 
 
 @contextmanager

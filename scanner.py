@@ -39,7 +39,7 @@ def parse_host(request_text):
     return m.group(1) if m else "unknown"
 
 
-def create_task(request_text, level, risk, timeout_min, note=""):
+def create_task(request_text, level, risk, timeout_min, note="", dbms_hint=""):
     task_id = uuid.uuid4().hex[:8]
     host = parse_host(request_text)
     task_dir = os.path.join(config.SCANS_DIR, task_id)
@@ -56,6 +56,7 @@ def create_task(request_text, level, risk, timeout_min, note=""):
             "level": level,
             "risk": risk,
             "timeout_min": timeout_min,
+            "dbms_hint": dbms_hint or "",
             "status": "pending",
             "request_text": request_text,
             "log": "",
@@ -104,6 +105,7 @@ def rerun_task(task_id):
         old["risk"],
         old["timeout_min"],
         note=old.get("note") or "",
+        dbms_hint=old.get("dbms_hint") or "",
     )
 
 
@@ -122,7 +124,7 @@ def delete_task(task_id):
     return "ok"
 
 
-def _build_cmd(sqlmap_path, request_file, output_dir, level, risk, extra=None):
+def _build_cmd(sqlmap_path, request_file, output_dir, level, risk, dbms=None, extra=None):
     # shlex.split honors quoted segments, so "/path with space/sqlmap" still
     # works when the user wraps it in quotes ("\"/path with space/sqlmap\"").
     cmd = shlex.split(sqlmap_path) if " " in sqlmap_path else [sqlmap_path]
@@ -132,11 +134,12 @@ def _build_cmd(sqlmap_path, request_file, output_dir, level, risk, extra=None):
     cmd += [
         "-r", request_file,
         "--batch",
-        "--dbms=mysql",
         f"--level={level}",
         f"--risk={risk}",
         f"--output-dir={output_dir}",
     ]
+    if dbms:
+        cmd.append(f"--dbms={dbms}")
     if extra:
         cmd += extra
     return cmd
@@ -273,17 +276,18 @@ def _execute_task(task_id):
 
     timeout_sec = task["timeout_min"] * 60 if task["timeout_min"] else None
     started = time.time()
+    dbms = task.get("dbms_hint") or None  # None = auto-detect
 
-    cmd_inject = _build_cmd(sqlmap_path, request_file, output_dir, task["level"], task["risk"])
+    cmd_inject = _build_cmd(sqlmap_path, request_file, output_dir, task["level"], task["risk"], dbms=dbms)
     cmd_update = _build_cmd(
-        sqlmap_path, request_file, output_dir, task["level"], task["risk"],
+        sqlmap_path, request_file, output_dir, task["level"], task["risk"], dbms=dbms,
         extra=[
             "--sql-query=UPDATE information_schema.TABLES "
             "SET TABLE_COMMENT=TABLE_COMMENT WHERE 1=0"
         ],
     )
     cmd_dba = _build_cmd(
-        sqlmap_path, request_file, output_dir, task["level"], task["risk"],
+        sqlmap_path, request_file, output_dir, task["level"], task["risk"], dbms=dbms,
         extra=["--is-dba"],
     )
 

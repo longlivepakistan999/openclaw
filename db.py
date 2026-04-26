@@ -36,7 +36,8 @@ def init_db():
             created_at      TEXT,
             started_at      TEXT,
             finished_at     TEXT,
-            duration_sec    INTEGER
+            duration_sec    INTEGER,
+            dbms_hint       TEXT
         );
 
         CREATE TABLE IF NOT EXISTS settings (
@@ -48,6 +49,12 @@ def init_db():
             "INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)",
             ("sqlmap_path", config.DEFAULT_SQLMAP_PATH),
         )
+        # Migration: add dbms_hint column if it doesn't exist yet
+        try:
+            conn.execute("ALTER TABLE tasks ADD COLUMN dbms_hint TEXT DEFAULT ''")
+        except Exception:
+            pass
+
         # Recover from a crash: any task left in 'running' state has no
         # owner process. Mark it as killed so the user can clean it up.
         conn.execute(
@@ -116,7 +123,7 @@ def get_task(task_id):
 _LIST_COLS = (
     "id, host, note, level, risk, timeout_min, status, queue_pos, "
     "inject_ok, update_ok, is_dba, inject_param, inject_type, inject_payload, "
-    "dbms, error, created_at, started_at, finished_at, duration_sec"
+    "dbms, error, created_at, started_at, finished_at, duration_sec, dbms_hint"
 )
 
 

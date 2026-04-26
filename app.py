@@ -32,21 +32,14 @@ def update_settings():
     return jsonify({"ok": True})
 
 
-_HEAVY_FIELDS = ("log", "request_text", "cmd_inject", "cmd_update", "cmd_dba")
-
-
 @app.get("/api/tasks")
 def list_tasks():
     tasks = db.list_tasks()
     pending = [t for t in tasks if t["status"] == "pending"]
     pending_index = {t["id"]: i + 1 for i, t in enumerate(pending)}
-    summaries = []
     for t in tasks:
         t["queue_position"] = pending_index.get(t["id"])
-        for f in _HEAVY_FIELDS:
-            t.pop(f, None)
-        summaries.append(t)
-    return jsonify(summaries)
+    return jsonify(tasks)
 
 
 @app.get("/api/tasks/<task_id>")

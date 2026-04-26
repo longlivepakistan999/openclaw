@@ -114,11 +114,18 @@ def get_task(task_id):
     return dict(row) if row else None
 
 
+_LIST_COLS = (
+    "id, host, note, level, risk, timeout_min, status, queue_pos, "
+    "inject_ok, update_ok, is_dba, inject_param, inject_type, inject_payload, "
+    "dbms, error, created_at, started_at, finished_at, duration_sec"
+)
+
+
 def list_tasks():
-    """Return all tasks ordered: running first, then pending by queue_pos, then others by created_at desc."""
+    """Return lightweight task summaries (no log/request_text/cmd_* columns)."""
     with connect() as conn:
-        rows = conn.execute("""
-            SELECT * FROM tasks
+        rows = conn.execute(f"""
+            SELECT {_LIST_COLS} FROM tasks
             ORDER BY
               CASE status
                 WHEN 'running' THEN 0

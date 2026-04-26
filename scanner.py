@@ -18,6 +18,13 @@ _current_task_id = None
 _wakeup = threading.Event()
 
 
+_ANSI_ESCAPE = re.compile(r'\x1b\[[0-9;?]*[a-zA-Z]|\x1b[()][AB012]|\x0f|\x0e')
+
+
+def _strip_ansi(text):
+    return _ANSI_ESCAPE.sub('', text)
+
+
 def now_iso():
     return datetime.now().isoformat(timespec="seconds")
 
@@ -156,7 +163,7 @@ def _run_sqlmap(cmd, timeout_sec):
     def _reader():
         try:
             for line in iter(proc.stdout.readline, ''):
-                output_lines.append(line)
+                output_lines.append(_strip_ansi(line))
         except Exception:
             pass
 

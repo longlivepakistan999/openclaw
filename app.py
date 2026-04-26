@@ -21,9 +21,14 @@ def get_settings():
 
 @app.post("/api/settings")
 def update_settings():
-    data = request.get_json(force=True) or {}
+    data = request.get_json(force=True, silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "invalid JSON object"}), 400
     if "sqlmap_path" in data:
-        db.set_setting("sqlmap_path", data["sqlmap_path"].strip())
+        path = data["sqlmap_path"]
+        if not isinstance(path, str):
+            return jsonify({"error": "sqlmap_path must be a string"}), 400
+        db.set_setting("sqlmap_path", path.strip())
     return jsonify({"ok": True})
 
 
@@ -52,18 +57,48 @@ def get_task(task_id):
     return jsonify(task)
 
 
+def _coerce_int(v, default, lo, hi):
+    """Return clamped int, or None on failure (caller decides what to do)."""
+    if v in (None, ""):
+        return default
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        return None
+    return max(lo, min(hi, n))
+
+
 @app.post("/api/tasks")
 def create_task():
-    data = request.get_json(force=True) or {}
-    request_text = (data.get("request_text") or "").strip()
-    if not request_text:
-        return jsonify({"error": "request_text required"}), 400
+    data = request.get_json(force=True, silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "invalid JSON object"}), 400
 
-    level = int(data.get("level") or config.DEFAULT_LEVEL)
-    risk = int(data.get("risk") or config.DEFAULT_RISK)
-    timeout_min = data.get("timeout_min")
-    timeout_min = int(timeout_min) if timeout_min not in (None, "", "0") else None
-    note = (data.get("note") or "").strip()
+    request_text = data.get("request_text")
+    if not isinstance(request_text, str) or not request_text.strip():
+        return jsonify({"error": "request_text required"}), 400
+    request_text = request_text.strip()
+
+    level = _coerce_int(data.get("level"), config.DEFAULT_LEVEL, 1, 5)
+    risk = _coerce_int(data.get("risk"), config.DEFAULT_RISK, 1, 3)
+    if level is None or risk is None:
+        return jsonify({"error": "level/risk must be integers"}), 400
+
+    raw_timeout = data.get("timeout_min")
+    if raw_timeout in (None, "", 0, "0"):
+        timeout_min = None
+    else:
+        try:
+            timeout_min = int(raw_timeout)
+            if timeout_min < 0:
+                timeout_min = None
+        except (TypeError, ValueError):
+            return jsonify({"error": "timeout_min must be an integer"}), 400
+
+    note = data.get("note") or ""
+    if not isinstance(note, str):
+        return jsonify({"error": "note must be a string"}), 400
+    note = note.strip()[:500]
 
     task_id = scanner.create_task(request_text, level, risk, timeout_min, note=note)
     return jsonify({"id": task_id})
@@ -107,9 +142,16 @@ def delete(task_id):
 
 @app.post("/api/tasks/batch")
 def batch():
-    data = request.get_json(force=True) or {}
+    data = request.get_json(force=True, silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "invalid JSON object"}), 400
     action = data.get("action")
-    ids = data.get("ids") or []
+    if action not in ("delete", "kill", "jump"):
+        return jsonify({"error": "action must be delete/kill/jump"}), 400
+    ids = data.get("ids")
+    if not isinstance(ids, list) or not all(isinstance(x, str) for x in ids):
+        return jsonify({"error": "ids must be a list of strings"}), 400
+
     results = {}
     for tid in ids:
         if action == "delete":
@@ -122,10 +164,8 @@ def batch():
                 results[tid] = True
             else:
                 results[tid] = False
-        elif action == "jump":
+        else:  # jump
             results[tid] = scanner.jump_queue(tid)
-        else:
-            return jsonify({"error": "unknown action"}), 400
     return jsonify({"results": results})
 
 

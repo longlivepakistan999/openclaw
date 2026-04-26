@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>SQLMap Web</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#13141a;color:#c9d1d9;font-family:-apple-system,'Segoe UI',sans-serif;font-size:14px}
+.sidebar{width:260px;background:#0d0e14;border-right:1px solid #21262d;height:100vh;position:fixed;left:0;top:0;display:flex;flex-direction:column}
+.logo{padding:20px 20px 16px;border-bottom:1px solid #21262d}
+.logo h1{font-size:16px;font-weight:700;color:#fff}
+.logo h1 span{color:#e85d04}
+.logo p{font-size:11px;color:#555;margin-top:2px}
+.nav{padding:12px 10px;flex:1;overflow-y:auto}
+.nav-label{font-size:10px;color:#444;letter-spacing:2px;text-transform:uppercase;padding:8px 10px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;color:#7d8590;font-size:13px;margin-bottom:2px;transition:all .15s}
+.nav-item:hover{background:#21262d;color:#c9d1d9}
+.nav-item.active{background:#1f2937;color:#fff}
+.nav-item .icon{width:16px;text-align:center;font-size:14px}
+.nav-item .badge{margin-left:auto;background:#e85d04;color:#fff;font-size:10px;padding:1px 6px;border-radius:10px}
+.nav-item .badge.green{background:#238636}
+.nav-item .badge.purple{background:#6e40c9}
+.nav-item .badge.blue{background:#1f6feb}
+.nav-item .badge.red{background:#da3633}
+.nav-item .badge.orange{background:#e85d04}
+.nav-item .badge.amber{background:#e3b341;color:#000}
+.nav-item .badge.dark{background:#8b2a2a}
+.config-box{padding:14px;border-top:1px solid #21262d}
+.config-box label{font-size:11px;color:#555;display:block;margin-bottom:4px}
+.config-box input{width:100%;background:#0d0e14;border:1px solid #30363d;color:#c9d1d9;padding:6px 10px;border-radius:5px;font-size:12px;outline:none}
+.config-box input:focus{border-color:#58a6ff}
+.config-box button{width:100%;margin-top:6px;background:#21262d;border:1px solid #30363d;color:#c9d1d9;padding:6px;border-radius:5px;cursor:pointer;font-size:12px}
+.config-box button:hover{background:#30363d}
+.main{margin-left:260px;min-height:100vh}
+.topbar{padding:16px 24px;border-bottom:1px solid #21262d;display:flex;align-items:center;justify-content:space-between;background:#0d0e14}
+.topbar h2{font-size:15px;font-weight:600;color:#fff}
+.new-scan-btn{background:#238636;border:none;color:#fff;padding:8px 18px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500}
+.new-scan-btn:hover{background:#2ea043}
+.content{padding:20px 24px}
+.stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:20px}
+.stat-card{background:#161b22;border:1px solid #21262d;border-radius:8px;padding:16px}
+.stat-card .label{font-size:12px;color:#7d8590;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.stat-card .value{font-size:28px;font-weight:700;color:#fff}
+.stat-card .sub{font-size:11px;color:#555;margin-top:4px}
+.stat-card.green{border-top:2px solid #238636}
+.stat-card.red{border-top:2px solid #da3633}
+.stat-card.orange{border-top:2px solid #e85d04}
+.stat-card.purple{border-top:2px solid #6e40c9}
+.stat-card.blue{border-top:2px solid #1f6feb}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.dot.green{background:#238636}.dot.red{background:#da3633}.dot.orange{background:#e85d04}
+.dot.purple{background:#6e40c9}.dot.blue{background:#1f6feb}
+.toolbar{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.search-box{flex:1;position:relative}
+.search-box input{width:100%;background:#161b22;border:1px solid #30363d;color:#c9d1d9;padding:8px 12px 8px 34px;border-radius:6px;font-size:13px;outline:none}
+.search-box input:focus{border-color:#58a6ff}
+.search-box::before{content:'⌕';position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#555}
+.sort-select{background:#161b22;border:1px solid #30363d;color:#c9d1d9;padding:8px 12px;border-radius:6px;font-size:13px;outline:none;cursor:pointer}
+.batch-bar{display:none;align-items:center;gap:10px;padding:10px 16px;background:#1f2937;border:1px solid #1f6feb;border-radius:8px;margin-bottom:14px}
+.batch-bar.show{display:flex}
+.batch-bar .selected-count{color:#58a6ff;font-size:13px;font-weight:500}
+.batch-bar .batch-btn{background:transparent;border:1px solid #30363d;color:#c9d1d9;padding:6px 14px;border-radius:5px;cursor:pointer;font-size:12px}
+.batch-bar .batch-btn:hover{background:#21262d}
+.batch-bar .batch-btn.danger{border-color:#8b2a2a;color:#f85149}
+.batch-bar .batch-btn.danger:hover{background:#8b2a2a44}
+.batch-bar .clear{margin-left:auto;color:#7d8590;cursor:pointer;font-size:12px}
+.batch-bar .clear:hover{color:#fff}
+.filter-row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.ftag{border:1px solid #30363d;background:transparent;color:#7d8590;padding:5px 14px;border-radius:20px;cursor:pointer;font-size:12px;transition:all .15s}
+.ftag:hover{border-color:#58a6ff;color:#58a6ff}
+.ftag.active{border-color:#58a6ff;color:#58a6ff;background:#58a6ff18}
+.table-wrap{background:#161b22;border:1px solid #21262d;border-radius:8px;overflow:hidden}
+.table-header{padding:12px 16px;border-bottom:1px solid #21262d;display:flex;align-items:center;justify-content:space-between}
+.table-header span{font-size:13px;font-weight:600;color:#fff}
+table{width:100%;border-collapse:collapse}
+th{padding:10px 16px;text-align:left;font-size:11px;color:#7d8590;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid #21262d;font-weight:500;background:#0d1117}
+td{padding:12px 16px;border-bottom:1px solid #161b22;vertical-align:middle}
+tbody tr{transition:background .1s;cursor:pointer}
+tbody tr:hover{background:#21262d44}
+tbody tr:last-child td{border-bottom:none}
+.td-host{font-weight:500;color:#58a6ff;font-size:13px}
+.td-id{font-size:11px;color:#444;font-family:monospace}
+.td-time{font-size:12px;color:#555}
+.row-check{width:16px;height:16px;accent-color:#1f6feb;cursor:pointer;vertical-align:middle}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:500}
+.tag-ok{background:#1a4a1a;color:#3fb950;border:1px solid #238636}
+.tag-fail{background:#3d1212;color:#f85149;border:1px solid #da3633}
+.tag-na{background:#1c2129;color:#444;border:1px solid #30363d}
+.tag-root{background:#2d1f5e;color:#a371f7;border:1px solid #6e40c9}
+.tag-running{background:#2a1f00;color:#e3b341;border:1px solid #9e6a03;animation:pulse .8s infinite alternate}
+.tag-pending{background:#1c2129;color:#7d8590;border:1px solid #30363d}
+.tag-killed{background:#2a1212;color:#ff7b72;border:1px solid #8b2a2a}
+.tag-queue{background:#0d2840;color:#58a6ff;border:1px solid #1f6feb;font-family:monospace;font-weight:600}
+.tag-now{background:#2a1f00;color:#e3b341;border:1px solid #9e6a03;font-weight:600}
+@keyframes pulse{from{opacity:.7}to{opacity:1}}
+.row-actions{display:flex;gap:6px}
+.act-btn{background:transparent;border:1px solid #30363d;color:#7d8590;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px;transition:all .15s}
+.act-btn:hover{background:#21262d}
+.act-jump{border-color:#1f6feb;color:#58a6ff}
+.act-jump:hover{background:#1f6feb22}
+.act-kill{border-color:#8b2a2a;color:#f85149}
+.act-kill:hover{background:#8b2a2a44}
+.act-rerun{border-color:#238636;color:#3fb950}
+.act-rerun:hover{background:#23863622}
+.act-del{border-color:#5a1a1a;color:#f85149}
+.act-del:hover{background:#5a1a1a44}
+.overlay{display:none;position:fixed;inset:0;background:#00000088;z-index:200}
+.overlay.show{display:flex;align-items:center;justify-content:center}
+.modal{background:#161b22;border:1px solid #30363d;border-radius:10px;width:780px;max-height:85vh;overflow:hidden;display:flex;flex-direction:column}
+.modal-head{padding:16px 20px;border-bottom:1px solid #21262d;display:flex;justify-content:space-between;align-items:center}
+.modal-head h3{font-size:14px;font-weight:600;color:#fff}
+.modal-close{background:none;border:none;color:#7d8590;font-size:18px;cursor:pointer}
+.modal-close:hover{color:#fff}
+.modal-body{padding:16px 20px;overflow-y:auto}
+.modal-foot{padding:14px 20px;border-top:1px solid #21262d;display:flex;justify-content:flex-end;gap:10px}
+.btn-cancel{background:transparent;border:1px solid #30363d;color:#7d8590;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px}
+.btn-cancel:hover{border-color:#555;color:#c9d1d9}
+.btn-start{background:#238636;border:none;color:#fff;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500}
+.btn-start:hover{background:#2ea043}
+.badge-row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.modal-tabs{display:flex;gap:0;border-bottom:1px solid #21262d;margin-bottom:14px}
+.modal-tab{padding:8px 16px;cursor:pointer;font-size:12px;color:#7d8590;border-bottom:2px solid transparent;margin-bottom:-1px}
+.modal-tab:hover{color:#c9d1d9}
+.modal-tab.active{color:#58a6ff;border-bottom-color:#58a6ff}
+.modal-pane{display:none}
+.modal-pane.active{display:block}
+.modal-section{margin-bottom:16px}
+.modal-section-title{font-size:11px;color:#7d8590;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px}
+.info-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:12px}
+.info-item{font-size:12px}
+.info-item .k{color:#7d8590;margin-bottom:2px}
+.info-item .v{color:#c9d1d9;font-family:monospace;word-break:break-all}
+.payload-box{background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:10px 12px;font-family:monospace;font-size:11px;color:#3fb950;word-break:break-all;position:relative;white-space:pre-wrap}
+.payload-box.cmd{color:#58a6ff}
+.payload-box.req{color:#c9d1d9}
+.payload-box.update{color:#e3b341}
+.copy-btn{position:absolute;top:6px;right:6px;background:#21262d;border:1px solid #30363d;color:#7d8590;font-size:10px;padding:2px 8px;border-radius:3px;cursor:pointer}
+.copy-btn:hover{color:#fff;background:#30363d}
+.log-pre{background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:14px;font-family:monospace;font-size:11px;line-height:1.7;color:#7d8590;white-space:pre-wrap;max-height:400px;overflow-y:auto}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:12px;color:#7d8590;margin-bottom:6px}
+.form-group textarea{width:100%;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:6px;padding:10px;font-family:monospace;font-size:12px;resize:vertical;min-height:180px;outline:none}
+.form-group textarea:focus{border-color:#58a6ff}
+.form-group select,.form-group input[type=text]{background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:5px;padding:7px 10px;font-size:13px;outline:none;width:100%}
+.form-group select:focus,.form-group input[type=text]:focus{border-color:#58a6ff}
+.form-row2{display:flex;gap:12px}
+.form-row2 .form-group{flex:1}
+.empty{padding:60px 20px;text-align:center;color:#555;font-size:13px}
+.toast{position:fixed;bottom:24px;right:24px;background:#161b22;border:1px solid #30363d;color:#c9d1d9;padding:10px 18px;border-radius:6px;font-size:13px;z-index:300;display:none}
+.toast.show{display:block}
+.toast.err{border-color:#da3633;color:#f85149}
+</style>
+</head>
+<body>
+<div class="sidebar">
+  <div class="logo">
+    <h1>SQLMap <span>Web</span></h1>
+    <p>自动化注入检测平台</p>
+  </div>
+  <div class="nav" id="navFilters">
+    <div class="nav-label">导航</div>
+    <div class="nav-item active" data-filter="all"><span class="icon">⊞</span> 任务列表 <span class="badge" id="cnt-all">0</span></div>
+    <div class="nav-item" data-filter="running"><span class="icon">◉</span> 运行中 <span class="badge amber" id="cnt-running">0</span></div>
+    <div class="nav-item" data-filter="pending"><span class="icon">⏱</span> 排队中 <span class="badge blue" id="cnt-pending">0</span></div>
+    <div class="nav-label">筛选</div>
+    <div class="nav-item" data-filter="inject_ok"><span class="icon">✓</span> 注入成功 <span class="badge green" id="cnt-inject-ok">0</span></div>
+    <div class="nav-item" data-filter="inject_fail"><span class="icon">✗</span> 注入失败 <span class="badge red" id="cnt-inject-fail">0</span></div>
+    <div class="nav-item" data-filter="update_ok"><span class="icon">✎</span> 允许 UPDATE <span class="badge orange" id="cnt-update-ok">0</span></div>
+    <div class="nav-item" data-filter="is_dba"><span class="icon">⚑</span> Root 权限 <span class="badge purple" id="cnt-dba">0</span></div>
+    <div class="nav-item" data-filter="killed"><span class="icon">■</span> 已终止 <span class="badge dark" id="cnt-killed">0</span></div>
+  </div>
+  <div class="config-box">
+    <label>SQLMAP 路径</label>
+    <input type="text" id="sqlmapPath" value="/usr/bin/sqlmap">
+    <button id="saveCfg">保存配置</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <h2>扫描任务</h2>
+    <button class="new-scan-btn" onclick="openModal('newScanModal')">＋ 新建扫描</button>
+  </div>
+  <div class="content">
+    <div class="stats-grid">
+      <div class="stat-card blue"><div class="label"><span class="dot blue"></span>队列状态</div><div class="value"><span id="stRunning">0</span><span style="font-size:14px;color:#7d8590;font-weight:400"> / <span id="stPending">0</span></span></div><div class="sub">运行中 / 排队中</div></div>
+      <div class="stat-card green"><div class="label"><span class="dot green"></span>注入成功</div><div class="value" id="stInjectOk">0</div><div class="sub">共 <span id="stTotal">0</span> 个任务</div></div>
+      <div class="stat-card red"><div class="label"><span class="dot red"></span>注入失败</div><div class="value" id="stInjectFail">0</div><div class="sub">无注入点</div></div>
+      <div class="stat-card orange"><div class="label"><span class="dot orange"></span>允许 UPDATE</div><div class="value" id="stUpdateOk">0</div><div class="sub">可写入操作</div></div>
+      <div class="stat-card purple"><div class="label"><span class="dot purple"></span>Root 权限</div><div class="value" id="stDba">0</div><div class="sub">DBA 权限</div></div>
+    </div>
+
+    <div class="toolbar">
+      <div class="search-box"><input type="text" id="searchInput" placeholder="搜索 Host 或 任务 ID..."></div>
+      <select class="sort-select" id="sortSelect">
+        <option value="newest">排序：最新优先</option>
+        <option value="oldest">排序：最早优先</option>
+        <option value="host">排序：Host A→Z</option>
+        <option value="duration">排序：耗时最长</option>
+      </select>
+    </div>
+
+    <div class="batch-bar" id="batchBar">
+      <span class="selected-count" id="batchCount">已选中 0 项</span>
+      <button class="batch-btn" data-batch="jump">↑ 批量插队</button>
+      <button class="batch-btn danger" data-batch="kill">■ 批量终止</button>
+      <button class="batch-btn danger" data-batch="delete">🗑 批量删除</button>
+      <span class="clear" id="batchClear">取消选择</span>
+    </div>
+
+    <div class="filter-row" id="filterRow">
+      <button class="ftag active" data-filter="all">全部 (<span class="c">0</span>)</button>
+      <button class="ftag" data-filter="running">运行中 (<span class="c">0</span>)</button>
+      <button class="ftag" data-filter="pending">排队中 (<span class="c">0</span>)</button>
+      <button class="ftag" data-filter="inject_ok">注入成功 (<span class="c">0</span>)</button>
+      <button class="ftag" data-filter="inject_fail">注入失败 (<span class="c">0</span>)</button>
+      <button class="ftag" data-filter="update_ok">允许 UPDATE (<span class="c">0</span>)</button>
+      <button class="ftag" data-filter="is_dba">Root 权限 (<span class="c">0</span>)</button>
+      <button class="ftag" data-filter="killed">已终止 (<span class="c">0</span>)</button>
+    </div>
+
+    <div class="table-wrap">
+      <div class="table-header"><span>扫描记录</span><span style="font-size:12px;color:#555" id="tableSummary">共 0 条</span></div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:34px"><input type="checkbox" class="row-check" id="checkAll"></th>
+            <th style="width:60px">队列</th>
+            <th>任务 ID</th>
+            <th>Host</th>
+            <th>注入</th>
+            <th>UPDATE</th>
+            <th>Root</th>
+            <th>状态</th>
+            <th>耗时</th>
+            <th style="width:200px">操作</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="empty" id="emptyState" style="display:none">暂无任务，点击「新建扫描」开始</div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="newScanModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>新建扫描任务</h3>
+      <button class="modal-close" onclick="closeModal('newScanModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>HTTP 请求包（用 * 标记注入点）</label>
+        <textarea id="reqText" placeholder="POST /login HTTP/1.1&#10;Host: target.com&#10;Content-Type: application/x-www-form-urlencoded&#10;Cookie: session=abc123&#10;&#10;username=admin*&password=123456"></textarea>
+      </div>
+      <div class="form-row2">
+        <div class="form-group">
+          <label>Level</label>
+          <select id="reqLevel"><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option></select>
+        </div>
+        <div class="form-group">
+          <label>Risk</label>
+          <select id="reqRisk"><option>1</option><option selected>2</option><option>3</option></select>
+        </div>
+        <div class="form-group">
+          <label>超时（分钟）</label>
+          <select id="reqTimeout"><option>5</option><option>10</option><option selected>15</option><option>30</option><option>60</option><option value="0">不限制</option></select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>备注（可选）</label>
+        <input type="text" id="reqNote" placeholder="如：客户A 内网扫描">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel" onclick="closeModal('newScanModal')">取消</button>
+      <button class="btn-start" id="btnStart">加入队列</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="detailModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="detailTitle">任务详情</h3>
+      <div style="display:flex;gap:8px">
+        <button class="act-btn act-rerun" id="detailRerun">↻ 重跑</button>
+        <button class="act-btn act-del" id="detailDel">🗑 删除</button>
+        <button class="modal-close" onclick="closeModal('detailModal')">✕</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="badge-row" id="detailBadges"></div>
+      <div class="modal-tabs">
+        <div class="modal-tab active" data-tab="result">结果</div>
+        <div class="modal-tab" data-tab="request">请求包</div>
+        <div class="modal-tab" data-tab="command">命令</div>
+        <div class="modal-tab" data-tab="log">完整日志</div>
+      </div>
+      <div class="modal-pane active" data-pane="result" id="paneResult"></div>
+      <div class="modal-pane" data-pane="request" id="paneRequest"></div>
+      <div class="modal-pane" data-pane="command" id="paneCommand"></div>
+      <div class="modal-pane" data-pane="log" id="paneLog"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script>
+let allTasks = [];
+let activeFilter = 'all';
+let currentDetailId = null;
+
+const $ = id => document.getElementById(id);
+function api(url, opts) { return fetch(url, opts).then(r => r.json()); }
+function openModal(id) { $(id).classList.add('show'); }
+function closeModal(id) { $(id).classList.remove('show'); }
+function showToast(msg, isErr) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isErr ? ' err' : '');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+function fmtDuration(sec) {
+  if (sec == null) return '—';
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function matchFilter(t, f) {
+  switch (f) {
+    case 'all': return true;
+    case 'running': return t.status === 'running';
+    case 'pending': return t.status === 'pending';
+    case 'killed': return t.status === 'killed';
+    case 'inject_ok': return t.inject_ok === 1;
+    case 'inject_fail': return t.status !== 'pending' && t.status !== 'running' && t.inject_ok === 0;
+    case 'update_ok': return t.update_ok === 1;
+    case 'is_dba': return t.is_dba === 1;
+  }
+  return true;
+}
+
+function statusTag(t) {
+  if (t.status === 'running') return '<span class="tag tag-running">运行中</span>';
+  if (t.status === 'pending') return '<span class="tag tag-pending">⏱ 排队</span>';
+  if (t.status === 'killed') return '<span class="tag tag-killed">已终止</span>';
+  return '<span class="tag tag-ok">完成</span>';
+}
+function injectTag(t) {
+  if (t.status === 'pending') return '<span class="tag tag-na">— 待测</span>';
+  if (t.status === 'running') return '<span class="tag tag-running">◉ 检测中</span>';
+  if (t.status === 'killed') return '<span class="tag tag-killed">■ 已终止</span>';
+  return t.inject_ok === 1 ? '<span class="tag tag-ok">✓ 成功</span>' : '<span class="tag tag-fail">✗ 失败</span>';
+}
+function updateTag(t) {
+  if (t.inject_ok !== 1) return '<span class="tag tag-na">— N/A</span>';
+  return t.update_ok === 1 ? '<span class="tag tag-ok">✓ 允许</span>' : '<span class="tag tag-na">— 否</span>';
+}
+function dbaTag(t) {
+  if (t.inject_ok !== 1) return '<span class="tag tag-na">— N/A</span>';
+  return t.is_dba === 1 ? '<span class="tag tag-root">✓ Root</span>' : '<span class="tag tag-na">— 否</span>';
+}
+function queueCell(t) {
+  if (t.status === 'running') return '<span class="tag tag-now">▶ NOW</span>';
+  if (t.status === 'pending' && t.queue_position) return `<span class="tag tag-queue">#${t.queue_position}</span>`;
+  return '<span style="color:#444">—</span>';
+}
+function actionsCell(t) {
+  if (t.status === 'running') {
+    return `<div class="row-actions"><button class="act-btn act-kill" data-act="kill" data-id="${t.id}">■ 终止</button></div>`;
+  }
+  if (t.status === 'pending') {
+    return `<div class="row-actions"><button class="act-btn act-jump" data-act="jump" data-id="${t.id}">↑ 插队</button><button class="act-btn act-del" data-act="delete" data-id="${t.id}">🗑</button></div>`;
+  }
+  return `<div class="row-actions"><button class="act-btn act-rerun" data-act="rerun" data-id="${t.id}">↻ 重跑</button><button class="act-btn act-del" data-act="delete" data-id="${t.id}">🗑</button></div>`;
+}
+
+function applySearchAndSort(list) {
+  const q = $('searchInput').value.trim().toLowerCase();
+  if (q) list = list.filter(t => (t.host || '').toLowerCase().includes(q) || (t.id || '').toLowerCase().includes(q));
+  const s = $('sortSelect').value;
+  list = [...list];
+  list.sort((a, b) => {
+    const ord = x => x.status === 'running' ? 0 : x.status === 'pending' ? 1 : 2;
+    if (ord(a) !== ord(b)) return ord(a) - ord(b);
+    if (a.status === 'pending' && b.status === 'pending') return (a.queue_position || 0) - (b.queue_position || 0);
+    if (s === 'oldest') return (a.created_at || '').localeCompare(b.created_at || '');
+    if (s === 'host') return (a.host || '').localeCompare(b.host || '');
+    if (s === 'duration') return (b.duration_sec || 0) - (a.duration_sec || 0);
+    return (b.created_at || '').localeCompare(a.created_at || '');
+  });
+  return list;
+}
+
+function updateStats() {
+  const cnt = {
+    all: allTasks.length,
+    running: allTasks.filter(t => t.status === 'running').length,
+    pending: allTasks.filter(t => t.status === 'pending').length,
+    inject_ok: allTasks.filter(t => t.inject_ok === 1).length,
+    inject_fail: allTasks.filter(t => matchFilter(t, 'inject_fail')).length,
+    update_ok: allTasks.filter(t => t.update_ok === 1).length,
+    is_dba: allTasks.filter(t => t.is_dba === 1).length,
+    killed: allTasks.filter(t => t.status === 'killed').length,
+  };
+  $('stRunning').textContent = cnt.running;
+  $('stPending').textContent = cnt.pending;
+  $('stInjectOk').textContent = cnt.inject_ok;
+  $('stInjectFail').textContent = cnt.inject_fail;
+  $('stUpdateOk').textContent = cnt.update_ok;
+  $('stDba').textContent = cnt.is_dba;
+  $('stTotal').textContent = cnt.all;
+  $('cnt-all').textContent = cnt.all;
+  $('cnt-running').textContent = cnt.running;
+  $('cnt-pending').textContent = cnt.pending;
+  $('cnt-inject-ok').textContent = cnt.inject_ok;
+  $('cnt-inject-fail').textContent = cnt.inject_fail;
+  $('cnt-update-ok').textContent = cnt.update_ok;
+  $('cnt-dba').textContent = cnt.is_dba;
+  $('cnt-killed').textContent = cnt.killed;
+  document.querySelectorAll('.ftag').forEach(b => {
+    const f = b.dataset.filter;
+    b.querySelector('.c').textContent = cnt[f] ?? 0;
+  });
+}
+
+function render() {
+  updateStats();
+  const filtered = applySearchAndSort(allTasks.filter(t => matchFilter(t, activeFilter)));
+  const tbody = $('tbody');
+  $('tableSummary').textContent = `共 ${allTasks.length} 条 · 运行中 ${allTasks.filter(t=>t.status==='running').length} · 排队中 ${allTasks.filter(t=>t.status==='pending').length}`;
+  if (filtered.length === 0) {
+    tbody.innerHTML = '';
+    $('emptyState').style.display = 'block';
+    return;
+  }
+  $('emptyState').style.display = 'none';
+  tbody.innerHTML = filtered.map(t => `
+    <tr data-id="${t.id}">
+      <td><input type="checkbox" class="row-check" data-id="${t.id}"></td>
+      <td>${queueCell(t)}</td>
+      <td class="td-id">${escapeHtml(t.id)}</td>
+      <td class="td-host">${escapeHtml(t.host)}${t.note ? `<div style="color:#555;font-size:11px;margin-top:2px">${escapeHtml(t.note)}</div>` : ''}</td>
+      <td>${injectTag(t)}</td>
+      <td>${updateTag(t)}</td>
+      <td>${dbaTag(t)}</td>
+      <td>${statusTag(t)}</td>
+      <td class="td-time">${fmtDuration(t.duration_sec)}</td>
+      <td>${actionsCell(t)}</td>
+    </tr>`).join('');
+  updateBatchBar();
+}
+
+function updateBatchBar() {
+  const checked = document.querySelectorAll('tbody .row-check:checked').length;
+  const bar = $('batchBar');
+  if (checked > 0) {
+    bar.classList.add('show');
+    $('batchCount').textContent = `已选中 ${checked} 项`;
+  } else {
+    bar.classList.remove('show');
+  }
+}
+
+async function refresh() {
+  try {
+    allTasks = await api('/api/tasks');
+    render();
+  } catch (e) { console.error(e); }
+}
+
+async function doAction(act, id) {
+  try {
+    if (act === 'jump') await api(`/api/tasks/${id}/jump`, {method:'POST'});
+    else if (act === 'kill') { if (!confirm('确定终止该任务?')) return; await api(`/api/tasks/${id}/kill`, {method:'POST'}); }
+    else if (act === 'delete') { if (!confirm('确定删除该任务?')) return; await api(`/api/tasks/${id}`, {method:'DELETE'}); }
+    else if (act === 'rerun') await api(`/api/tasks/${id}/rerun`, {method:'POST'});
+    showToast('操作成功');
+    refresh();
+  } catch (e) { showToast('操作失败', true); }
+}
+
+async function doBatch(action) {
+  const ids = [...document.querySelectorAll('tbody .row-check:checked')].map(c => c.dataset.id);
+  if (!ids.length) return;
+  if (action === 'delete' && !confirm(`确定删除 ${ids.length} 个任务?`)) return;
+  if (action === 'kill' && !confirm(`确定终止选中的运行中任务?`)) return;
+  await api('/api/tasks/batch', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({action, ids})
+  });
+  showToast('批量操作完成');
+  refresh();
+}
+
+function showDetail(id) {
+  const t = allTasks.find(x => x.id === id);
+  if (!t) return;
+  currentDetailId = id;
+  $('detailTitle').innerHTML = `任务详情 — ${escapeHtml(t.host)} <span style="color:#7d8590;font-weight:400;font-size:12px;margin-left:8px">${escapeHtml(t.id)}</span>`;
+  const badges = [];
+  if (t.inject_ok === 1) badges.push('<span class="tag tag-ok">注入 ✓</span>');
+  else if (t.status !== 'pending' && t.status !== 'running' && t.status !== 'killed') badges.push('<span class="tag tag-fail">注入 ✗</span>');
+  if (t.update_ok === 1) badges.push('<span class="tag tag-ok">UPDATE ✓</span>');
+  if (t.is_dba === 1) badges.push('<span class="tag tag-root">Root ✓</span>');
+  if (t.duration_sec != null) badges.push(`<span class="tag" style="background:#1c2129;color:#7d8590;border:1px solid #30363d">耗时 ${fmtDuration(t.duration_sec)}</span>`);
+  if (t.created_at) badges.push(`<span class="tag" style="background:#1c2129;color:#7d8590;border:1px solid #30363d">${escapeHtml(t.created_at)}</span>`);
+  if (t.error) badges.push(`<span class="tag tag-fail">错误: ${escapeHtml(t.error)}</span>`);
+  $('detailBadges').innerHTML = badges.join('');
+
+  $('paneResult').innerHTML = t.inject_ok === 1 ? `
+    <div class="modal-section"><div class="modal-section-title">注入点信息</div>
+      <div class="info-grid">
+        <div class="info-item"><div class="k">参数</div><div class="v">${escapeHtml(t.inject_param || '—')}</div></div>
+        <div class="info-item"><div class="k">注入类型</div><div class="v">${escapeHtml(t.inject_type || '—')}</div></div>
+        <div class="info-item"><div class="k">DBMS</div><div class="v">${escapeHtml(t.dbms || '—')}</div></div>
+        <div class="info-item"><div class="k">当前用户</div><div class="v">${escapeHtml(t.current_user || '—')}</div></div>
+        <div class="info-item"><div class="k">UPDATE</div><div class="v" style="color:${t.update_ok===1?'#3fb950':'#7d8590'}">${t.update_ok===1?'允许':'不允许'}</div></div>
+        <div class="info-item"><div class="k">DBA 权限</div><div class="v" style="color:${t.is_dba===1?'#a371f7':'#7d8590'}">${t.is_dba===1?'True':'False'}</div></div>
+      </div>
+    </div>
+    <div class="modal-section"><div class="modal-section-title">Payload</div>
+      <div class="payload-box">${escapeHtml(t.inject_payload || '—')}<button class="copy-btn" data-copy="${escapeHtml(t.inject_payload||'')}">复制</button></div>
+    </div>` : `<div class="empty">未发现注入点${t.error ? ' · 错误：' + escapeHtml(t.error) : ''}</div>`;
+
+  $('paneRequest').innerHTML = `<div class="modal-section"><div class="modal-section-title">原始请求包</div>
+    <div class="payload-box req">${escapeHtml(t.request_text || '')}<button class="copy-btn" data-copy="${escapeHtml(t.request_text||'')}">复制</button></div></div>`;
+
+  $('paneCommand').innerHTML = `
+    <div class="modal-section"><div class="modal-section-title">注入检测命令</div><div class="payload-box cmd">${escapeHtml(t.cmd_inject || '—')}<button class="copy-btn" data-copy="${escapeHtml(t.cmd_inject||'')}">复制</button></div></div>
+    <div class="modal-section"><div class="modal-section-title">UPDATE 测试命令</div><div class="payload-box cmd">${escapeHtml(t.cmd_update || '—')}<button class="copy-btn" data-copy="${escapeHtml(t.cmd_update||'')}">复制</button></div></div>
+    <div class="modal-section"><div class="modal-section-title">DBA 检测命令</div><div class="payload-box cmd">${escapeHtml(t.cmd_dba || '—')}<button class="copy-btn" data-copy="${escapeHtml(t.cmd_dba||'')}">复制</button></div></div>`;
+
+  $('paneLog').innerHTML = `<div class="log-pre">${escapeHtml(t.log || '（无日志）')}</div>`;
+  document.querySelectorAll('.modal-tab').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.modal-pane').forEach(x => x.classList.remove('active'));
+  document.querySelector('.modal-tab[data-tab="result"]').classList.add('active');
+  $('paneResult').classList.add('active');
+  openModal('detailModal');
+}
+
+document.addEventListener('click', async (e) => {
+  const tgt = e.target;
+  if (tgt.matches('.act-btn[data-act]')) { e.stopPropagation(); doAction(tgt.dataset.act, tgt.dataset.id); return; }
+  if (tgt.matches('.row-check')) { e.stopPropagation(); updateBatchBar(); return; }
+  if (tgt.closest('tr[data-id]') && !tgt.closest('.row-actions')) {
+    const tr = tgt.closest('tr[data-id]');
+    showDetail(tr.dataset.id);
+  }
+  if (tgt.matches('.modal-tab')) {
+    document.querySelectorAll('.modal-tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.modal-pane').forEach(x => x.classList.remove('active'));
+    tgt.classList.add('active');
+    document.querySelector(`[data-pane="${tgt.dataset.tab}"]`).classList.add('active');
+  }
+  if (tgt.matches('.copy-btn')) {
+    navigator.clipboard.writeText(tgt.dataset.copy || '');
+    showToast('已复制');
+  }
+  if (tgt.matches('.batch-btn[data-batch]')) doBatch(tgt.dataset.batch);
+});
+
+$('checkAll').addEventListener('change', e => {
+  document.querySelectorAll('tbody .row-check').forEach(c => c.checked = e.target.checked);
+  updateBatchBar();
+});
+$('batchClear').addEventListener('click', () => {
+  document.querySelectorAll('.row-check').forEach(c => c.checked = false);
+  updateBatchBar();
+});
+$('searchInput').addEventListener('input', render);
+$('sortSelect').addEventListener('change', render);
+
+document.querySelectorAll('#navFilters .nav-item, .ftag').forEach(el => {
+  el.addEventListener('click', () => {
+    activeFilter = el.dataset.filter;
+    document.querySelectorAll('#navFilters .nav-item').forEach(x => x.classList.toggle('active', x.dataset.filter === activeFilter));
+    document.querySelectorAll('.ftag').forEach(x => x.classList.toggle('active', x.dataset.filter === activeFilter));
+    render();
+  });
+});
+
+$('btnStart').addEventListener('click', async () => {
+  const body = {
+    request_text: $('reqText').value,
+    level: parseInt($('reqLevel').value),
+    risk: parseInt($('reqRisk').value),
+    timeout_min: parseInt($('reqTimeout').value),
+    note: $('reqNote').value,
+  };
+  if (!body.request_text.trim()) { showToast('请粘贴请求包', true); return; }
+  const r = await fetch('/api/tasks', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  if (r.ok) { closeModal('newScanModal'); $('reqText').value = ''; $('reqNote').value = ''; showToast('任务已加入队列'); refresh(); }
+  else { showToast('创建失败', true); }
+});
+
+$('detailRerun').addEventListener('click', () => currentDetailId && doAction('rerun', currentDetailId).then(() => closeModal('detailModal')));
+$('detailDel').addEventListener('click', () => currentDetailId && doAction('delete', currentDetailId).then(() => closeModal('detailModal')));
+
+$('saveCfg').addEventListener('click', async () => {
+  await fetch('/api/settings', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({sqlmap_path: $('sqlmapPath').value})});
+  showToast('配置已保存');
+});
+
+(async () => {
+  const cfg = await api('/api/settings');
+  $('sqlmapPath').value = cfg.sqlmap_path || '/usr/bin/sqlmap';
+  await refresh();
+  setInterval(refresh, 3000);
+})();
+</script>
+</body>
+</html>

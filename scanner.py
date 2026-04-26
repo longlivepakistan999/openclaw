@@ -37,7 +37,7 @@ def create_task(request_text, level, risk, timeout_min, note=""):
     host = parse_host(request_text)
     task_dir = os.path.join(config.SCANS_DIR, task_id)
     os.makedirs(task_dir, exist_ok=True)
-    with open(os.path.join(task_dir, "request.txt"), "w") as f:
+    with open(os.path.join(task_dir, "request.txt"), "w", encoding="utf-8") as f:
         f.write(request_text)
 
     db.insert_task({
@@ -48,7 +48,6 @@ def create_task(request_text, level, risk, timeout_min, note=""):
         "risk": risk,
         "timeout_min": timeout_min,
         "status": "pending",
-        "queue_pos": db.next_queue_pos(),
         "request_text": request_text,
         "log": "",
         "created_at": now_iso(),
@@ -108,7 +107,9 @@ def delete_task(task_id):
 
 
 def _build_cmd(sqlmap_path, request_file, output_dir, level, risk, extra=None):
-    cmd = sqlmap_path.split() if " " in sqlmap_path else [sqlmap_path]
+    # shlex.split honors quoted segments, so "/path with space/sqlmap" still
+    # works when the user wraps it in quotes ("\"/path with space/sqlmap\"").
+    cmd = shlex.split(sqlmap_path) if " " in sqlmap_path else [sqlmap_path]
     cmd += [
         "-r", request_file,
         "--batch",
@@ -190,11 +191,13 @@ def _parse_injection(output):
     if m:
         result["inject_param"] = f"{m.group(1)} ({m.group(2)})"
 
-    m = re.search(r"Type:\s*(.+)", output)
+    # Match the indented "Type:" line in sqlmap's injection block (avoids
+    # matching HTTP "Content-Type:" headers echoed earlier in output).
+    m = re.search(r"^[ \t]+Type:\s*(.+)$", output, re.MULTILINE)
     if m:
         result["inject_type"] = m.group(1).strip()
 
-    m = re.search(r"Payload:\s*(.+)", output)
+    m = re.search(r"^[ \t]+Payload:\s*(.+)$", output, re.MULTILINE)
     if m:
         result["inject_payload"] = m.group(1).strip()
 

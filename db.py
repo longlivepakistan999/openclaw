@@ -86,7 +86,15 @@ def set_setting(key, value):
 
 
 def insert_task(task):
+    """Insert a task. If queue_pos is missing and status='pending', assign
+    next position atomically inside the same locked transaction."""
     with connect() as conn:
+        if "queue_pos" not in task and task.get("status") == "pending":
+            row = conn.execute(
+                "SELECT COALESCE(MAX(queue_pos), -1) + 1 AS n "
+                "FROM tasks WHERE status='pending'"
+            ).fetchone()
+            task["queue_pos"] = row["n"]
         cols = ",".join(task.keys())
         ph = ",".join("?" for _ in task)
         conn.execute(f"INSERT INTO tasks({cols}) VALUES ({ph})", tuple(task.values()))

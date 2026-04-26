@@ -210,14 +210,25 @@ def _parse_injection(output):
     return result
 
 
+_UPDATE_FAIL_PATTERNS = [
+    r"command denied",
+    r"access denied",
+    r"permission denied",
+    r"not allowed",
+    r"no privilege",
+    r"insufficient privilege",
+    r"read[- ]only",
+    r"all tested parameters do not appear to be injectable",
+    r"unable to retrieve",
+]
+
+
 def _parse_update(output):
-    if "SQL statement(s) executed without producing any output" in output:
-        return 1
-    if re.search(r"executed (without|successfully)", output, re.I):
-        return 1
-    if "ERROR" in output and "UPDATE" in output:
-        return 0
-    return 0
+    """Blacklist: if any failure pattern matched, return 0; else 1."""
+    for pat in _UPDATE_FAIL_PATTERNS:
+        if re.search(pat, output, re.I):
+            return 0
+    return 1
 
 
 def _parse_dba(output):

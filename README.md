@@ -71,6 +71,110 @@ gunicorn -w 1 -b 0.0.0.0:5000 "app:app" --preload
 
 ---
 
+## 宝塔面板（aaPanel）部署
+
+宝塔支持直接托管 Python 项目，全程图形化，不需要手写 systemd。
+
+### 第一步：安装 sqlmap
+
+宝塔终端执行：
+
+```bash
+pip3 install sqlmap
+which sqlmap        # 记下路径，通常是 /usr/local/bin/sqlmap 或 /usr/bin/sqlmap
+```
+
+### 第二步：安装 Python 项目管理器
+
+宝塔面板 → **软件商店** → 搜索 **Python项目管理器** → 安装。
+
+同时确认已安装 **Python 3.9+**（软件商店 → 运行环境 → Python 管理器，选版本安装）。
+
+### 第三步：上传代码
+
+在宝塔「文件」里把代码上传到服务器，例如 `/www/wwwroot/openclaw/`。
+
+或者在终端 git clone：
+
+```bash
+cd /www/wwwroot
+git clone <your-repo> openclaw
+```
+
+### 第四步：安装依赖
+
+宝塔终端：
+
+```bash
+cd /www/wwwroot/openclaw
+pip3 install -r requirements.txt
+pip3 install gunicorn
+```
+
+### 第五步：添加 Python 项目
+
+宝塔面板 → **Python项目管理器** → **添加项目**，按下表填写：
+
+| 字段 | 填写内容 |
+|------|----------|
+| 项目名称 | openclaw |
+| 项目路径 | `/www/wwwroot/openclaw` |
+| Python版本 | 选你安装的 3.9+ 版本 |
+| 启动方式 | **gunicorn** |
+| 启动文件 | `app:app` |
+| 端口 | `5000`（或其他空闲端口） |
+| 启动参数 | `-w 1 --preload` |
+
+> **`-w 1` 必须填**，任务队列状态保存在内存，多 worker 会导致任务状态混乱。
+
+点击「确定」，项目管理器会自动启动并设置开机自启。
+
+### 第六步：配置反向代理（绑定域名）
+
+宝塔面板 → **网站** → **添加站点**，填入域名。
+
+站点建好后 → 点击站点 → **反向代理** → 添加反向代理：
+
+| 字段 | 填写内容 |
+|------|----------|
+| 代理名称 | openclaw |
+| 目标URL | `http://127.0.0.1:5000` |
+| 发送域名 | `$host` |
+
+保存后即可通过域名访问。
+
+### 第七步：开启 HTTPS（可选）
+
+宝塔面板 → 网站 → 点击站点 → **SSL** → 选「Let's Encrypt」，一键申请证书并开启强制 HTTPS。
+
+### 第八步：修改 sqlmap 路径
+
+首次访问页面，点右上角「设置」，把 sqlmap 路径改成第一步 `which sqlmap` 查到的实际路径。
+
+---
+
+### 宝塔常见问题
+
+**项目启动失败**
+
+Python项目管理器 → 点击项目 → 查看「运行日志」，通常是依赖没装或路径写错。
+
+**5000 端口被占用**
+
+改用其他端口（如 5001、8888），在项目管理器里修改端口，反向代理目标 URL 也同步修改。
+
+**宝塔防火墙拦截**
+
+如果只走 Nginx 反向代理，5000 端口不需要对外开放，不用在宝塔防火墙里放行。
+
+**sqlmap 执行没权限**
+
+```bash
+chmod +x /usr/local/bin/sqlmap
+```
+
+---
+
 ## Systemd 服务（开机自启）
 
 创建 `/etc/systemd/system/openclaw.service`：

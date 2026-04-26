@@ -232,8 +232,24 @@ def _parse_dba(output):
 
 
 def _parse_current_user(output):
-    m = re.search(r"current user:\s*'?([^'\n]+)'?", output)
-    return m.group(1).strip() if m else None
+    """sqlmap can print the current user in several formats:
+      - current user: 'root'@'localhost'
+      - [INFO] retrieved: 'root@localhost'
+      - [INFO] resumed: 'root@localhost'
+      - or as a bare value on its own line right before 'current user is DBA:'
+    """
+    m = re.search(r"current user:\s*'?([^'\n]+?)'?\s*$", output, re.MULTILINE)
+    if m and "is DBA" not in m.group(1):
+        return m.group(1).strip()
+    m = re.search(r"\[INFO\]\s+(?:retrieved|resumed):\s*(.+?)\s*$", output, re.MULTILINE)
+    if m:
+        return m.group(1).strip().replace("'", "")
+    m = re.search(r"^([^\[\s][^\n]{0,80})\s*\n\s*current user is DBA:", output, re.MULTILINE)
+    if m:
+        candidate = m.group(1).strip()
+        if re.match(r"^[\w\-.@%'\"\\]+$", candidate):
+            return candidate
+    return None
 
 
 def _execute_task(task_id):

@@ -210,22 +210,38 @@ def _parse_injection(output):
     return result
 
 
+_UPDATE_SUCCESS_PATTERNS = [
+    # sqlmap prints this when a non-SELECT statement was executed via stacked queries
+    r"SQL statement\(s\)\s+executed without producing any output",
+    r"SQL query was executed",
+]
+
 _UPDATE_FAIL_PATTERNS = [
+    # sqlmap's own warnings when stacked queries / non-SELECT not supported
     r"stacked queries are not supported",
     r"execution of non-query SQL statements is only available when stacked queries are supported",
     r"execution of custom SQL queries is only available when stacked queries are supported",
     r"only SELECT statements? (?:are|is) allowed",
     r"the SQL query provided is not a SELECT statement",
+    r"dropping the query as it is not a SELECT statement",
 ]
 
 
 def _parse_update(output):
-    """Detect sqlmap's own message that UPDATE is not supported on this target.
-    If sqlmap printed a 'not supported / select-only' notice, return 0; else 1."""
+    """Three-state detection of UPDATE support via sqlmap's own messages.
+
+    Returns:
+        1   sqlmap explicitly confirmed the non-SELECT statement executed
+        0   sqlmap explicitly refused (no stacked queries / SELECT-only)
+        None  ambiguous — could not determine from output
+    """
+    for pat in _UPDATE_SUCCESS_PATTERNS:
+        if re.search(pat, output, re.I):
+            return 1
     for pat in _UPDATE_FAIL_PATTERNS:
         if re.search(pat, output, re.I):
             return 0
-    return 1
+    return None
 
 
 def _parse_dba(output):

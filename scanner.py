@@ -133,7 +133,7 @@ def _build_cmd(sqlmap_path, request_file, output_dir, level, risk, extra=None):
         "-r", request_file,
         "--batch",
         "--ignore-stdin",
-        "--answers=custom injection=Y,follow=Y,process=Y",
+        "--answers=custom injection=Y,follow=Y,process=Y,anti-CSRF=Y,automatically update=Y",
         f"--level={level}",
         f"--risk={risk}",
         f"--output-dir={output_dir}",

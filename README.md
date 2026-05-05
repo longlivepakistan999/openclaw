@@ -2,99 +2,86 @@
 
 自动化 SQLmap 扫描队列，Web 界面管理注入任务。
 
+---
+
 ## 环境要求
 
-- Python 3.9+
-- sqlmap（已安装在系统）
+| 依赖 | 版本要求 |
+|------|----------|
+| Python | 3.9 及以上 |
+| sqlmap | 任意版本（推荐最新） |
+| Flask | 3.0.0（requirements.txt 自动安装） |
+| Gunicorn | 生产环境需要（pip 安装） |
 
 ---
 
-## 快速部署
+## 一、直接运行（测试用）
 
-### 1. 克隆 / 上传代码
+适合本地测试，不建议生产环境使用。
 
 ```bash
+# 1. 克隆代码
 git clone <your-repo> openclaw
 cd openclaw
-```
 
-### 2. 安装依赖
+# 2. 安装依赖
+pip3 install -r requirements.txt
 
-```bash
-pip install -r requirements.txt
-```
-
-### 3. 确认 sqlmap 路径
-
-默认路径是 `/usr/bin/sqlmap`，可以先检查：
-
-```bash
+# 3. 确认 sqlmap 已安装
 which sqlmap
 sqlmap --version
+
+# 4. 启动
+python3 app.py
 ```
 
-如果路径不同，启动后在页面右上角「设置」里改，或直接改 `config.py`：
+访问 `http://127.0.0.1:5000`
 
-```python
-DEFAULT_SQLMAP_PATH = "/usr/bin/sqlmap"
-```
-
-### 4. 启动
-
-```bash
-python app.py
-```
-
-浏览器访问 `http://127.0.0.1:5000`
-
-数据库和扫描目录会自动创建，无需手动初始化。
+数据库和扫描目录会**自动创建**，无需手动初始化。
 
 ---
 
-## 生产部署（推荐）
+## 二、生产环境（Gunicorn）
 
-直接用 `python app.py` 跑的是 Flask 开发服务器，不适合长期运行。推荐用 Gunicorn。
-
-### 安装 Gunicorn
+Flask 自带的开发服务器不适合长期运行，生产环境必须用 Gunicorn。
 
 ```bash
-pip install gunicorn
-```
+pip3 install gunicorn
 
-### 启动
-
-```bash
 gunicorn -w 1 -b 0.0.0.0:5000 "app:app" --preload
 ```
 
-**必须 `-w 1`（单 worker）**，因为扫描任务队列和子进程状态保存在内存里，多 worker 会导致状态不一致。
+> **`-w 1` 必须保留**：任务队列和子进程状态保存在内存中，多 worker 会导致状态混乱。
 
 ---
 
-## 宝塔面板（aaPanel）部署
-
-宝塔支持直接托管 Python 项目，全程图形化，不需要手写 systemd。
+## 三、宝塔面板（aaPanel）部署
 
 ### 第一步：安装 sqlmap
 
-宝塔终端执行：
+在宝塔终端执行：
 
 ```bash
 pip3 install sqlmap
-which sqlmap        # 记下路径，通常是 /usr/local/bin/sqlmap 或 /usr/bin/sqlmap
+
+# 记下实际路径，后面要用
+which sqlmap
+# 通常是 /usr/local/bin/sqlmap 或 /usr/bin/sqlmap
 ```
 
-### 第二步：安装 Python 项目管理器
+如果系统 sqlmap 是 .py 文件（如 `/www/wwwroot/sqlmap/sqlmap-master/sqlmap.py`），直接填该路径即可，程序会自动加 `python3` 前缀执行。
 
-宝塔面板 → **软件商店** → 搜索 **Python项目管理器** → 安装。
+### 第二步：安装 Python 管理器
 
-同时确认已安装 **Python 3.9+**（软件商店 → 运行环境 → Python 管理器，选版本安装）。
+宝塔面板 → **软件商店** → 搜索 **Python项目管理器** → 安装
+
+同时安装 **Python 3.9+**（软件商店 → 运行环境 → Python 管理器，选版本安装）
 
 ### 第三步：上传代码
 
-在宝塔「文件」里把代码上传到服务器，例如 `/www/wwwroot/openclaw/`。
+方式一：宝塔「文件」里直接上传并解压到 `/www/wwwroot/openclaw/`
 
-或者在终端 git clone：
+方式二：在终端 git clone：
 
 ```bash
 cd /www/wwwroot
@@ -102,8 +89,6 @@ git clone <your-repo> openclaw
 ```
 
 ### 第四步：安装依赖
-
-宝塔终端：
 
 ```bash
 cd /www/wwwroot/openclaw
@@ -113,27 +98,25 @@ pip3 install gunicorn
 
 ### 第五步：添加 Python 项目
 
-宝塔面板 → **Python项目管理器** → **添加项目**，按下表填写：
+宝塔面板 → **Python项目管理器** → **添加项目**：
 
 | 字段 | 填写内容 |
 |------|----------|
 | 项目名称 | openclaw |
 | 项目路径 | `/www/wwwroot/openclaw` |
-| Python版本 | 选你安装的 3.9+ 版本 |
-| 启动方式 | **gunicorn** |
+| Python版本 | 选已安装的 3.9+ 版本 |
+| 启动方式 | gunicorn |
 | 启动文件 | `app:app` |
-| 端口 | `5000`（或其他空闲端口） |
+| 端口 | `5000` |
 | 启动参数 | `-w 1 --preload` |
-
-> **`-w 1` 必须填**，任务队列状态保存在内存，多 worker 会导致任务状态混乱。
 
 点击「确定」，项目管理器会自动启动并设置开机自启。
 
 ### 第六步：配置反向代理（绑定域名）
 
-宝塔面板 → **网站** → **添加站点**，填入域名。
+宝塔面板 → **网站** → **添加站点** → 填入域名
 
-站点建好后 → 点击站点 → **反向代理** → 添加反向代理：
+站点建好后 → 点击站点 → **反向代理** → 添加：
 
 | 字段 | 填写内容 |
 |------|----------|
@@ -141,41 +124,45 @@ pip3 install gunicorn
 | 目标URL | `http://127.0.0.1:5000` |
 | 发送域名 | `$host` |
 
-保存后即可通过域名访问。
-
 ### 第七步：开启 HTTPS（可选）
 
-宝塔面板 → 网站 → 点击站点 → **SSL** → 选「Let's Encrypt」，一键申请证书并开启强制 HTTPS。
+宝塔面板 → 网站 → 点击站点 → **SSL** → Let's Encrypt → 一键申请证书
 
-### 第八步：修改 sqlmap 路径
+### 第八步：设置 sqlmap 路径
 
-首次访问页面，点右上角「设置」，把 sqlmap 路径改成第一步 `which sqlmap` 查到的实际路径。
+首次访问页面，在左侧底部「SQLMAP 路径」输入框填入第一步查到的实际路径，点「保存配置」。
 
 ---
 
 ### 宝塔常见问题
 
-**项目启动失败**
+**任务一直排队，不运行**
 
-Python项目管理器 → 点击项目 → 查看「运行日志」，通常是依赖没装或路径写错。
+Python项目管理器 → 查看「运行日志」，确认 worker 线程有无报错。重启项目后，卡住的 running 任务会自动标记为 killed，可以重新提交。
 
-**5000 端口被占用**
-
-改用其他端口（如 5001、8888），在项目管理器里修改端口，反向代理目标 URL 也同步修改。
-
-**宝塔防火墙拦截**
-
-如果只走 Nginx 反向代理，5000 端口不需要对外开放，不用在宝塔防火墙里放行。
-
-**sqlmap 执行没权限**
+**sqlmap 无权限**
 
 ```bash
 chmod +x /usr/local/bin/sqlmap
+# 或者
+chmod +x /www/wwwroot/sqlmap/sqlmap-master/sqlmap.py
 ```
+
+**5000 端口被占用**
+
+Python项目管理器里把端口改为其他空闲端口（如 5001、8888），反向代理目标 URL 同步修改。
+
+**5000 端口不需要对外开放**，走 Nginx 反向代理，宝塔防火墙不用放行 5000。
+
+**重新部署后任务记录还在**
+
+数据库文件是 `openclaw.db`，扫描文件在 `scans/` 目录，删掉这两个即可清空数据。
 
 ---
 
-## Systemd 服务（开机自启）
+## 四、Systemd 服务（纯命令行服务器）
+
+不用宝塔的情况下，用 systemd 管理进程和开机自启。
 
 创建 `/etc/systemd/system/openclaw.service`：
 
@@ -186,7 +173,7 @@ After=network.target
 
 [Service]
 User=www-data
-WorkingDirectory=/opt/openclaw
+WorkingDirectory=/www/wwwroot/openclaw
 ExecStart=/usr/local/bin/gunicorn -w 1 -b 0.0.0.0:5000 "app:app" --preload
 Restart=on-failure
 RestartSec=5
@@ -194,6 +181,8 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 ```
+
+> `User=www-data` 按实际情况修改，`WorkingDirectory` 填代码实际路径。
 
 启用并启动：
 
@@ -204,11 +193,15 @@ systemctl start openclaw
 systemctl status openclaw
 ```
 
+查看日志：
+
+```bash
+journalctl -u openclaw -f
+```
+
 ---
 
-## Nginx 反向代理（可选）
-
-如果需要绑定域名或 HTTPS，在 Nginx 里加一个 location：
+## 五、Nginx 反向代理（绑定域名 / HTTPS）
 
 ```nginx
 server {
@@ -221,83 +214,16 @@ server {
         proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 300s;
     }
 }
 ```
 
-HTTPS 用 certbot 申请证书即可：
+HTTPS 证书：
 
 ```bash
 certbot --nginx -d scan.example.com
 ```
-
----
-
-## 远程执行（Server A 跑 sqlmap，Server B 跑 Web）
-
-适合目标网络只有 Server A 能访问的场景。Web 界面和数据库在 Server B，sqlmap 在 Server A 上执行，通过 SSH 传文件、取结果。**Server A 只需要有 sqlmap 和 SSH，不需要部署任何额外代码。**
-
-```
-[ 浏览器 ] → [ Server B: Flask + SQLite ]
-                        ↓ SSH
-               [ Server A: sqlmap ]
-                        ↓ 访问目标
-               [ 目标服务器 ]
-```
-
-### Server A 准备
-
-```bash
-# 安装 sqlmap
-pip3 install sqlmap
-which sqlmap   # 记下路径
-
-# 允许 Server B 的 SSH 公钥登录
-cat /server-b/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
-```
-
-### Server B 准备（Web 服务器）
-
-```bash
-# 生成 SSH 密钥对（如果没有）
-ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N ""
-
-# 测试能免密登录 Server A
-ssh -i ~/.ssh/id_rsa user@<server-a-ip> "sqlmap --version"
-```
-
-### 配置 Web 界面
-
-启动后，左侧栏「远程执行」区域填写：
-
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| SSH Host | Server A 的 IP 或域名 | `192.168.1.10` |
-| SSH Port | SSH 端口 | `22` |
-| SSH User | 登录用户名 | `root` |
-| 私钥路径 | Server B 上私钥的绝对路径 | `/root/.ssh/id_rsa` |
-| 远程 sqlmap 路径 | Server A 上 sqlmap 的路径 | `/usr/local/bin/sqlmap` |
-
-SSH Host 留空 = 本地模式，填写后自动切换到远程模式。
-
-### 工作流程
-
-每个任务执行时：
-1. SSH 连接 Server A
-2. 在 Server A 创建 `/tmp/openclaw_<task_id>/`
-3. 通过 SFTP 上传 `request.txt`
-4. 在 Server A 上执行 sqlmap，实时读取输出
-5. 执行完毕后删除 Server A 上的临时文件
-6. 结果保存到 Server B 的 SQLite 数据库
-
-终止任务时，会通过 SSH 向 Server A 发送 `pkill -9` 杀掉对应进程。
-
-### 注意事项
-
-- Server B 到 Server A 的 SSH 连接使用私钥认证，不推荐用密码
-- Server A 的 `/tmp` 需要有写入权限
-- 如果 Server A 和 Server B 的 sqlmap 版本不同，以 Server A 实际版本为准
-- 防火墙只需开放 Server B → Server A 的 SSH（22端口），目标网络无需对 Server B 可达
 
 ---
 
@@ -308,13 +234,13 @@ openclaw/
 ├── app.py            # Flask 路由
 ├── scanner.py        # 扫描队列 & sqlmap 调用
 ├── db.py             # SQLite 数据库操作
-├── config.py         # 路径 & 默认参数配置
+├── config.py         # 路径 & 默认参数
 ├── requirements.txt
-├── openclaw.db       # 自动创建
-├── scans/            # 自动创建，每个任务一个子目录
+├── openclaw.db       # 运行时自动创建
+├── scans/            # 运行时自动创建
 │   └── <task_id>/
 │       ├── request.txt
-│       └── output/   # sqlmap 输出
+│       └── output/   # sqlmap 输出文件
 └── templates/
     └── index.html
 ```
@@ -323,40 +249,59 @@ openclaw/
 
 ## 使用说明
 
-1. 用 Burp / 浏览器抓到 HTTP 请求报文
-2. 在注入点处打上 `*` 标记（sqlmap `-r` 模式识别）
-3. 粘贴到「新建任务」，填好 Level / Risk / 超时，提交
-4. 任务进入队列，自动串行执行，页面每 3 秒刷新一次
+### 基本流程
 
-**三个扫描阶段：**
+1. 用 Burp Suite 或浏览器开发者工具抓到 HTTP 请求报文
+2. 在注入点处打上 `*` 标记，例如：
+   ```
+   POST /login HTTP/1.1
+   Host: target.com
+   Content-Type: application/x-www-form-urlencoded
 
-| 阶段 | 命令 | 目的 |
+   username=admin*&password=123456
+   ```
+3. 点击「新建扫描」，粘贴请求包，填好 Level / Risk / 超时，提交
+4. 任务进入队列，串行自动执行，页面每 3 秒刷新
+
+### 扫描阶段
+
+每个任务分三个阶段，后两个阶段只在注入探测成功后才执行：
+
+| 阶段 | 目的 |
+|------|------|
+| 注入探测 | 检测是否存在 SQL 注入点 |
+| UPDATE 测试 | 检测是否支持堆叠查询（可写入操作） |
+| DBA 检测 | 检测当前数据库用户是否有 root/DBA 权限 |
+
+### Level / Risk 说明
+
+| 参数 | 范围 | 说明 |
 |------|------|------|
-| 注入探测 | sqlmap -r ... | 是否存在 SQL 注入 |
-| UPDATE 测试 | --sql-query=UPDATE ... | 是否支持堆叠查询写操作 |
-| DBA 检测 | --is-dba | 当前数据库用户是否有 root 权限 |
+| Level | 1–5 | 测试深度，越高测试越多参数（Headers、Cookies 等），但越慢 |
+| Risk | 1–3 | 风险等级，越高使用越激进的 payload（可能影响数据库数据） |
 
-后两个阶段只在注入探测成功后才执行。
+默认 Level=2、Risk=2，适合大多数场景。
+
+### CSRF Token 说明
+
+请求包里带有 CSRF Token 的目标，sqlmap 扫描时会自动识别并询问是否自动更新 Token，程序已配置为自动选 Y。如果 Token 是每次请求动态生成的，建议在请求包里保留最新的 Token 值。
 
 ---
 
 ## 常见问题
 
-**sqlmap 找不到**
+**sqlmap 找不到 / 路径错误**
 
-页面右上角「设置」里修改 sqlmap 路径，或 `which sqlmap` 确认。
+页面左侧底部「SQLMAP 路径」输入框修改路径，或直接编辑 `config.py` 里的 `DEFAULT_SQLMAP_PATH`。
 
-**任务一直 pending**
+**任务一直 pending 不执行**
 
-检查 worker 线程是否正常。重启服务即可，重启时会自动把卡住的 running 任务标记为 killed。
+重启服务。重启会自动将卡住的 running 任务标记为 killed，重新提交即可。
 
-**端口被占用**
+**sqlmap 版本问题（using STDIN for parsing targets list）**
 
-```bash
-# 改端口
-gunicorn -w 1 -b 0.0.0.0:8080 "app:app" --preload
-```
+部分 sqlmap dev 版本在非交互模式下有此 bug，程序已通过 `--ignore-stdin` 参数规避。
 
-**磁盘空间**
+**磁盘占用增长**
 
-sqlmap 的 `--output-dir` 输出会积累在 `scans/<task_id>/output/`，可以定期清理已完成任务。
+sqlmap 输出积累在 `scans/<task_id>/output/`，可在页面上删除已完成的任务，或直接 `rm -rf scans/`（会清空扫描文件，数据库记录保留）。

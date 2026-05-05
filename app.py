@@ -1,10 +1,24 @@
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, Response
 
 import config
 import db
 import scanner
 
 app = Flask(__name__)
+
+
+@app.before_request
+def check_auth():
+    if not config.AUTH_USERNAME or not config.AUTH_PASSWORD:
+        return
+    auth = request.authorization
+    if not auth or auth.username != config.AUTH_USERNAME or auth.password != config.AUTH_PASSWORD:
+        return Response(
+            "请输入用户名和密码",
+            401,
+            {"WWW-Authenticate": 'Basic realm="OpenClaw"'},
+        )
+
 
 # Start the background worker whenever this module is imported (covers both
 # direct execution and WSGI servers like Gunicorn that skip __main__).
